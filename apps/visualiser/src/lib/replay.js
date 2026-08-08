@@ -14,28 +14,20 @@ export function flowForNode(map, nodeId) {
   return candidates.find((f) => !isInteractive(f)) ?? candidates[0]
 }
 
-// Renders a flow as a copy-pasteable shell script. Deterministic steps become
-// real commands; interactive steps become annotated comments plus an agent
-// command that can replay the whole thing.
+// Renders a flow's replay command. Flows are argent YAML
+// (argent.swmansion.com) — replayable headlessly, no LLM in the loop.
 export function replayCommand(flow, appName) {
-  const lines = [`# ${appName} · replay flow "${flow.name}" — ${flow.title ?? ''}`.trimEnd()]
-  let interactive = false
-  for (const [i, st] of (flow.steps ?? []).entries()) {
-    if (st.action === 'open_url') lines.push(`xcrun simctl openurl booted "${st.url}"`)
-    else if (st.action === 'wait') lines.push(`sleep ${st.seconds ?? 1}`)
-    else if (st.action === 'screenshot')
-      lines.push(`xcrun simctl io booted screenshot "${st.file ?? `step-${i}.png`}"`)
-    else {
-      interactive = true
-      const where = st.coordinate ? ` at (${st.coordinate.join(', ')})pt` : ''
-      const fromTo = st.from && st.to ? ` from (${st.from.join(', ')}) to (${st.to.join(', ')})` : ''
-      lines.push(`# step ${i + 1}: ${st.action} ${st.target ?? ''}${where}${fromTo} — needs simulator control`.trimEnd())
+  const lines = [
+    `# ${appName} · replay flow "${flow.name}" — ${flow.title ?? ''}`.trimEnd(),
+    `# run from the app's project root (flows live in .expo-map/flows/)`,
+    `npx @swmansion/argent flow run .expo-map/flows/${flow.name}.yaml`,
+  ]
+  if (!isInteractive(flow)) {
+    const links = (flow.steps ?? []).filter((st) => st.action === 'open_url' && st.url)
+    if (links.length) {
+      lines.push('#', '# no-tooling fallback (plain deep link):')
+      for (const st of links) lines.push(`# xcrun simctl openurl booted "${st.url}"`)
     }
-  }
-  if (interactive) {
-    lines.push('#')
-    lines.push(`# interactive steps need an agent driving the simulator:`)
-    lines.push(`claude "/expo-map replay ${flow.name}"`)
   }
   return lines.join('\n')
 }

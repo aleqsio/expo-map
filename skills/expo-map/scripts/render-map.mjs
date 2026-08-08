@@ -44,11 +44,14 @@ try {
   captureStatus = JSON.parse(fs.readFileSync(path.join(baseDir, 'capture-status.json'), 'utf8'))
 } catch {}
 
+// v2 sidecars (.meta.json) or legacy v1 flow JSON — the fallback renderer only
+// needs names/titles/results, which both carry
 const flowsDir = path.join(baseDir, 'flows')
 const flows = fs.existsSync(flowsDir)
   ? fs
       .readdirSync(flowsDir)
       .filter((f) => f.endsWith('.json'))
+      .filter((f, _, all) => f.endsWith('.meta.json') || !all.some((x) => x.endsWith('.meta.json')))
       .map((f) => {
         try {
           return { ...JSON.parse(fs.readFileSync(path.join(flowsDir, f), 'utf8')), _file: f }

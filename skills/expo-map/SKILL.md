@@ -9,32 +9,37 @@ Produce a visual map of an Expo app's navigation: every expo-router route as a c
 
 **Arguments:** optional path to the Expo project (default: current working directory). `--static` = skip the simulator phases and render a screenshot-less map.
 
-**Working directory contract:** all outputs go to `<project>/.expo-map/` — `graph.json`, `screens/*.png`, `flows/*.json`, `map.html`. Suggest adding `.expo-map/` to the project's `.gitignore` at the end.
+**Working directory contract:** all outputs go to `<project>/.expo-map/` — `graph.json`, `screens/*.png`, `flows/*.yaml` + `flows/*.meta.json`, `map.html`. Suggest adding `.expo-map/` to the project's `.gitignore` at the end.
 
 ## Flow recording (do this throughout Phases 4–5)
 
-Every interaction sequence you perform is recorded as a **replayable agent flow** in `<project>/.expo-map/flows/<name>.json`, written at the moment you perform it — not reconstructed afterwards. Flows let a future agent session (or E2E scaffold) reach any screen or state without rediscovering the steps. Schema:
+Every interaction sequence you perform is recorded as a **replayable flow**, written at the moment you perform it — not reconstructed afterwards. Flows use the **argent flow format** (argent.swmansion.com — Software Mansion's agentic mobile toolkit): a `<name>.yaml` argent flow plus a `<name>.meta.json` cartography sidecar, both in `<project>/.expo-map/flows/`. Anyone replays a flow headlessly, no LLM in the loop: `npx @swmansion/argent flow run .expo-map/flows/<name>.yaml`. Full pair schema: `docs/appmap-format.md` in the skill repo.
 
-```json
-{
-  "name": "details-sheet-50",
-  "title": "Open item details and expand the sheet to 50%",
-  "route": "details/[id]",
-  "device": "iPhone 17 Pro",
-  "pointSize": [402, 874],
-  "recordedAt": "<iso date>",
-  "steps": [
-    { "action": "open_url", "url": "myapp://details/42", "note": "deep link, params from fixtures" },
-    { "action": "wait", "seconds": 1.5 },
-    { "action": "tap", "target": "Open sheet button", "coordinate": [200, 410] },
-    { "action": "swipe", "from": [200, 700], "to": [200, 422], "note": "drag sheet handle to 50%" },
-    { "action": "screenshot", "file": "details_id--sheet-50.png" }
-  ],
-  "result": "Sheet resting at 50% snap point"
-}
+```yaml
+# Open item details and expand the sheet to 50%
+steps:
+  - tool: open-url
+    args:
+      url: "myapp://details/42"
+  - wait: 1500
+  # Open sheet button
+  - tap: { x: 0.4975, y: 0.4691 }
+  - tool: gesture-swipe
+    args: { fromX: 0.4975, fromY: 0.8009, toX: 0.4975, toY: 0.4828 }
 ```
 
-Rules: `route` is the graph.json route id the flow targets. `coordinate`/`from`/`to` are device points and are REQUIRED on every tap/swipe (the visualiser renders them as gesture markers on the screen); `pointSize` is the device's point dimensions, reported by the simulator MCP attach. When a tap/swipe NAVIGATES to a different screen, add `"screen": "<route id of where it landed>"` to that step — this is how multi-screen interactive flows stay traceable in the visualiser (deep-link steps don't need it; their URL identifies the screen). Coordinates are advisory for replay; `target` is the durable identifier (visible label or accessibility description), so always fill it. Simple deep-link visits from the sweep are flows too (generate them mechanically alongside the sweep). Multi-step interactions from the state pass are recorded individually as you do them, including dead ends you resolved (note the fix). The renderer picks up `flows/*.json` automatically and shows them in an "Agent flows" section of the map.
+```json
+{ "formatVersion": 2, "name": "details-sheet-50", "route": "details/[id]",
+  "title": "Open item details and expand the sheet to 50%", "device": "iPhone 17 Pro",
+  "steps": { "2": { "target": "Open sheet button" },
+             "3": { "capture": "details_id--sheet-50.png", "note": "sheet at 50% snap" } } }
+```
+
+Rules:
+- **If the argent MCP is connected, record through it** (`flow-start-recording` / `flow-add-step`): every step executes live, only successful steps are recorded, and taps get durable **selectors** instead of coordinates. Write the sidecar yourself alongside. Without argent, write the YAML directly using normalized 0–1 coordinates (device points ÷ device point-size).
+- Sidecar `steps` is keyed by 0-based YAML step index. Every coordinate tap/swipe needs a `target` label (visible text or accessibility description). When a tap/swipe NAVIGATES to a different screen, set `"screen": "<route id it landed on>"` — this is how multi-screen flows stay traceable and observed edges get pinned. Screenshots are sidecar `capture` entries on the step they follow — never YAML steps.
+- Simple deep-link visits from the sweep are flows too (generate them mechanically). Record dead ends you resolved with a `note`.
+- Never record credentials; argent supports `{{secret:NAME}}` placeholders if input is unavoidable.
 
 ## Phase 1 — static parse
 
@@ -112,7 +117,7 @@ Rules for this phase:
 
 ## Phase 5b — navigation flows (the tap path to every screen)
 
-Deep links are shorthands; the map's primary flow for each screen is the path a human takes. For every reachable route, record `flows/nav-<slug>.json` (name `nav-<slug>`, title "Navigate to <urlPath>") that reaches it from app launch using real taps:
+Deep links are shorthands; the map's primary flow for each screen is the path a human takes. For every reachable route, record `flows/nav-<slug>.yaml` + sidecar (name `nav-<slug>`, title "Navigate to <urlPath>") that reaches it from app launch using real taps:
 
 - Step 1 is always `open_url` to the app root (`scheme://`) — that's the app entry, not a shortcut. Everything after is taps/swipes.
 - **Every navigating tap records three things**: `coordinate` (device points), `target` (durable label), and `screen` (the route id it landed on). Verify the landing with an MCP screenshot BEFORE writing the step — a wrong `screen` poisons the graph.
@@ -135,12 +140,13 @@ The `.appmap` bundle (zip: manifest.json + map.json + screens/) is the primary d
 
 ## Replay mode — `/expo-map replay <flow-name>`
 
-Replays a recorded flow (the visualiser's "copy replay command" emits `claude "/expo-map replay <name>"` for interactive flows). Locate the flow: `<project>/.expo-map/flows/<name>.json`, or unzip it from a provided `.appmap` bundle. Ensure the app is running (Phase 3 recipe), then execute steps in order:
+Flows are argent YAML, so the primary replay is **headless**:
 
-- `open_url` / `wait` / `screenshot` — via `xcrun simctl` exactly as recorded.
-- `tap` / `swipe` — via the simulator MCP. The `target` label is the source of truth: take an MCP screenshot, find the element it describes, and tap what you see; the recorded `coordinate` is a hint that may have drifted (different device, UI changes). Same safety rules as Phase 5: never trigger destructive or submitting controls.
+```bash
+npx @swmansion/argent flow run <project>/.expo-map/flows/<flow-name>.yaml
+```
 
-Verify each step's outcome with an MCP screenshot before proceeding; if a step's target can't be found in 3 attempts, stop and report which step failed and what the screen showed instead.
+Run that first (it needs no LLM and reports pass/fail per step). Fall back to manual replay only when argent isn't installed and can't be (`npx` unavailable) or when the flow fails and the user wants a diagnosis: execute the YAML steps yourself — `open-url`/`wait` via `xcrun simctl`, taps/swipes via the simulator MCP using the sidecar's `target` labels as the source of truth (recorded coordinates are hints that may have drifted). Verify each step with an MCP screenshot; if a target can't be found in 3 attempts, stop and report which step failed and what the screen showed instead. Same safety rules as Phase 5: never trigger destructive or submitting controls.
 
 ## Web fallback (no macOS simulator available, or user asks for web)
 

@@ -23,20 +23,23 @@ try {
   captureStatus = JSON.parse(fs.readFileSync(path.join(base, 'capture-status.json'), 'utf8'))
 } catch {}
 
+// v2: flows are argent YAML + .meta.json sidecars, shipped verbatim in the
+// bundle (the visualiser parses them client-side). Metas are read here only
+// for the device field and the flow count.
 const flowsDir = path.join(base, 'flows')
-const flows = fs.existsSync(flowsDir)
-  ? fs
-      .readdirSync(flowsDir)
-      .filter((f) => f.endsWith('.json'))
-      .map((f) => {
-        try {
-          return JSON.parse(fs.readFileSync(path.join(flowsDir, f), 'utf8'))
-        } catch {
-          return null
-        }
-      })
-      .filter(Boolean)
+const flowFiles = fs.existsSync(flowsDir)
+  ? fs.readdirSync(flowsDir).filter((f) => f.endsWith('.yaml') || f.endsWith('.meta.json'))
   : []
+const flows = flowFiles
+  .filter((f) => f.endsWith('.meta.json'))
+  .map((f) => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(flowsDir, f), 'utf8'))
+    } catch {
+      return null
+    }
+  })
+  .filter(Boolean)
 
 const shotsDir = path.join(base, 'screens')
 const shotFiles = fs.existsSync(shotsDir)
@@ -72,10 +75,11 @@ const nodes = graph.routes.map((r) => {
   }
 })
 
-const map = { nodes, edges: graph.edges ?? [], flows }
+const map = { nodes, edges: graph.edges ?? [], flows: [] }
 const manifest = {
-  formatVersion: 1,
-  generator: 'expo-map/1.0',
+  formatVersion: 2,
+  flowFormat: 'argent', // flows/*.yaml runnable via `argent flow run`
+  generator: 'expo-map/2.0',
   app: {
     name: appName,
     scheme: graph.scheme ?? null,
@@ -92,11 +96,13 @@ try {
   fs.writeFileSync(path.join(stage, 'map.json'), JSON.stringify(map, null, 2))
   fs.mkdirSync(path.join(stage, 'screens'))
   for (const f of shotFiles) fs.copyFileSync(path.join(shotsDir, f), path.join(stage, 'screens', f))
+  fs.mkdirSync(path.join(stage, 'flows'))
+  for (const f of flowFiles) fs.copyFileSync(path.join(flowsDir, f), path.join(stage, 'flows', f))
 
   const date = new Date().toISOString().slice(0, 10)
   outPath = path.resolve(outPath ?? path.join(base, `${appName}-${date}.appmap`))
   fs.rmSync(outPath, { force: true })
-  execFileSync('zip', ['-r', '-q', outPath, 'manifest.json', 'map.json', 'screens'], { cwd: stage })
+  execFileSync('zip', ['-r', '-q', outPath, 'manifest.json', 'map.json', 'screens', 'flows'], { cwd: stage })
   const kb = Math.round(fs.statSync(outPath).size / 1024)
   console.log(`wrote ${outPath} (${kb} KB, ${nodes.length} nodes, ${map.edges.length} edges, ${flows.length} flows, ${shotFiles.length} screenshots)`)
 } finally {

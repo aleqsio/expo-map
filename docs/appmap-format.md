@@ -1,7 +1,7 @@
-# .appmap bundle format (v1)
+# .appmap bundle format (v2)
 
 A `.appmap` file is a plain **zip** containing everything needed to render an application's
-navigation map: the graph, screenshots, capture verdicts, and replayable agent flows.
+navigation map: the graph, screenshots, capture verdicts, and replayable flows.
 It is the *interchange* format — the expo-map skill's working directory
 (`.expo-map/` with `graph.json`, `capture-status.json`, `flows/`, `screens/`) is the
 append-friendly *working* format, and `pack-map.mjs` merges it into a bundle.
@@ -9,12 +9,23 @@ append-friendly *working* format, and `pack-map.mjs` merges it into a bundle.
 The format is producer-agnostic: nothing in it is expo-specific. Any tool that can
 enumerate screens, capture them, and describe transitions can emit a bundle.
 
+**Flows are [argent](https://argent.swmansion.com) flow YAML** — Software Mansion's
+agentic mobile toolkit — so every flow in a bundle replays headlessly, no LLM in the
+loop: `argent flow run .expo-map/flows/<name>.yaml`. A `.meta.json` sidecar per flow
+carries the cartography argent doesn't model: route ids, per-step screen hops,
+capture files, and human target labels.
+
 ```
-myapp-2026-08-06.appmap        (zip)
-├── manifest.json
+myapp-2026-08-08.appmap        (zip)
+├── manifest.json              # formatVersion: 2, flowFormat: "argent"
 ├── map.json
-└── screens/*.png              # slug-named; state variants as <slug>--<state>.png
+├── screens/*.png              # slug-named; state variants as <slug>--<state>.png
+└── flows/
+    ├── <name>.yaml            # argent flow — runnable via `argent flow run`
+    └── <name>.meta.json       # sidecar: route, screen hops, captures, labels
 ```
+
+(v1 bundles inlined JSON flows in `map.json`; viewers should keep reading them.)
 
 ## manifest.json
 
@@ -62,25 +73,50 @@ myapp-2026-08-06.appmap        (zip)
     "raw": "navigate('StarterPack')",          // source expression
     "target": "/starter-pack/:name/:rkey"
   }],
-  "flows": [{                          // replayable agent flows (see SKILL.md schema)
-    "name": "profile-open-menu",
-    "title": "Open the profile … menu bottom sheet",
-    "route": "Profile",                // node id the flow targets
-    "device": "iPhone 17 Pro",
-    "pointSize": [402, 874],           // device point dimensions for tap/swipe coordinates
-                                       // (viewers default to [402, 874] when absent)
-    "recordedAt": "2026-08-06T13:00:00.000Z",
-    "steps": [
-      { "action": "open_url", "url": "bluesky://profile/bsky.app" },
-      { "action": "wait", "seconds": 2 },
-      { "action": "tap", "target": "… button in profile header", "coordinate": [370, 178] },
-      { "action": "screenshot", "file": "Profile--menu.png" }
-    ],
-    // any step may carry "screen": "<node id>" — the screen the app is on AFTER
-    // the step runs. Required on taps/swipes that NAVIGATE to another screen,
-    // so viewers can trace interactive flows across multiple nodes.
-    "result": "Bottom sheet with Share/Mute/Block/Report options"
-  }]
+  "flows": []                          // v2: always empty — flows live in flows/*.yaml
+}
+```
+
+## Flows: argent YAML + sidecar
+
+Each flow is a pair of files. The **YAML** is a standard [argent flow](https://argent.swmansion.com)
+(directives: `launch`, `tap`, `type`, `scroll-to`, `await`, `assert`, `wait`, `snapshot`,
+`run`, `when`, `tool`, …). All coordinates are **normalized 0–1**. Deep links use the
+`open-url` tool step. Comments carry human labels for coordinate taps.
+
+```yaml
+# Open the profile … menu bottom sheet
+steps:
+  - tool: open-url
+    args:
+      url: "bluesky://profile/bsky.app"
+  - wait: 2000
+  # '…' overflow button in profile header
+  - tap: { x: 0.9204, y: 0.2037 }
+```
+
+Prefer **selector taps** (`tap: Login`, `tap: { id: submit }`) when recorded via argent's
+own tools — they survive layout changes. Coordinate taps are the fallback for recordings
+made without accessibility-tree access.
+
+The **`.meta.json` sidecar** maps YAML step indexes (0-based, sparse) to cartography:
+
+```jsonc
+{
+  "formatVersion": 2,
+  "name": "profile-open-menu",
+  "title": "Open the profile … menu bottom sheet",
+  "route": "Profile",                  // node id the flow targets
+  "device": "iPhone 17 Pro",
+  "recordedAt": "2026-08-06T13:00:00.000Z",
+  "steps": {
+    "6": { "target": "'…' overflow button in profile header", // durable human label
+           "screen": "Profile",        // route id the app is on AFTER this step —
+                                       // REQUIRED on navigating taps/swipes
+           "capture": "Profile--menu.png" }  // screenshot taken after this step;
+                                             // state variants attach to nodes this way
+  },
+  "result": "Bottom sheet with Share/Mute/Block/Report options"
 }
 ```
 
@@ -88,10 +124,9 @@ myapp-2026-08-06.appmap        (zip)
 
 - **Node ↔ flow tie**: a node's canonical flow is the one with `route == node.id`
   (producers should emit at least a trivial deep-link flow per reachable node).
-  Flows whose steps contain only `open_url` / `wait` / `screenshot` are **deterministic** —
-  replayable as a plain shell script. Flows containing `tap` / `swipe` / `type` are
-  **interactive** — coordinates are advisory (recorded-device points); `target` labels
-  are the durable identifiers for an agent to re-find.
+  Flows whose YAML contains only `open-url` / `wait` steps are **deterministic
+  deep links**; flows with `tap` / `type` / gesture steps are **interactive** —
+  both replay via `argent flow run`, no agent needed.
 - **State variants** attach extra captures to a node; `screens/<slug>--<state>.png`.
 - **needsNavigation** nodes cannot be reached by bare deep link; their flow or note
   explains the in-app path.
