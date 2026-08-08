@@ -1,0 +1,7 @@
+{
+  "expo": {
+    "name": "Demo App",
+    "slug": "demo-app",
+    "scheme": "demoapp"
+  }
+}

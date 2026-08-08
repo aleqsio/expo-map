@@ -1,0 +1,65 @@
+# expo-map
+
+A Claude Code skill that produces a **visual navigation map of an Expo / React Native app**: every screen as a card with a real screenshot, runtime state variants (bottom sheets, dialogs, drawers), the navigation edges between screens, and **replayable agent flows** recording how to reach each screen — packed into a portable `.appmap` bundle and explored in an interactive visualiser.
+
+**Visualiser (hosted):** https://appmap-visualiser.vercel.app — drag a `.appmap` in; everything parses client-side, nothing uploads.
+
+## How it works
+
+```
+┌─────────────────┐     ┌───────────────────────┐     ┌────────────────┐     ┌──────────────┐
+│ 1. static parse │ ──▶ │ 2. agent exploration  │ ──▶ │ 3. pack        │ ──▶ │ 4. visualise │
+│ parse-routes.mjs│     │ (simulator + flows)   │     │ pack-map.mjs   │     │ (web app)    │
+└─────────────────┘     └───────────────────────┘     └────────────────┘     └──────────────┘
+  routes, edges,          screenshots per screen        <app>.appmap zip       graph map with
+  state hints             + state variants              (manifest, map.json,   flow playback,
+                          + nav/interaction flows        screens/*.png)        tap overlays
+```
+
+1. **Static parse** (zero deps): expo-router file conventions *and* react-navigation route maps (à la Bluesky's `src/routes.ts`) → full route list, navigation edges from `Link`/`navigate()` calls, and **state hints** (which screens use bottom-sheet/dialog systems).
+2. **Agent exploration** in the iOS simulator: deep-link sweep capturing every screen, capture classification (real / empty-state / not-found / error-boundary / auth-wall), **navigation flows** (the real tap path to each screen, with coordinates, durable target labels, and per-tap `screen` hops), transient-state captures (open drawers, sheets, dialogs), and recovery from sticky error boundaries.
+3. **Pack**: everything merges into a producer-agnostic `.appmap` zip — see [docs/appmap-format.md](docs/appmap-format.md).
+4. **Visualise**: top-down graph (root screen top-center) with phone-framed screenshots, solid code-declared edges + dashed agent-observed edges, flow playback with a follow camera and tap/swipe markers on the exact screen state they happened on, per-screen state dropdowns, one-action **neighbours** mode, minimap click-to-jump, and copy-paste replay commands for every flow.
+
+## Install the skill
+
+```bash
+git clone https://github.com/aleqsio/expo-map
+ln -s "$(pwd)/expo-map/skills/expo-map" ~/.claude/skills/expo-map
+```
+
+Then in any Expo/RN project, in Claude Code:
+
+```
+/expo-map            # full run: parse + simulator exploration + pack
+/expo-map --static   # parse + render only, no simulator
+/expo-map replay <flow-name>   # replay a recorded flow on the simulator
+```
+
+Outputs land in `<project>/.expo-map/` (git-ignore it).
+
+## Run the visualiser locally
+
+```bash
+cd apps/visualiser
+npm install
+npm run dev
+```
+
+Drop a `.appmap` bundle on the landing page. To bake in a demo bundle, place one at `apps/visualiser/public/demo.appmap` (git-ignored by default — bundles contain real screenshots of whatever account was signed in, so publish deliberately).
+
+## Repo layout
+
+- `skills/expo-map/SKILL.md` — the agent orchestration (phases, safety rails, flow-recording contract)
+- `skills/expo-map/scripts/` — `parse-routes.mjs`, `pack-map.mjs`, `render-map.mjs` (static HTML fallback) — plain Node, no dependencies
+- `apps/visualiser/` — the `.appmap` viewer (Vite + React Flow + elkjs)
+- `docs/appmap-format.md` — bundle format contract, versioned
+- `fixtures/demo-app/` — minimal expo-router app exercising the parser
+
+## Known limits
+
+- Edge extraction is regex-based; dynamic hrefs resolve to their route pattern.
+- Screens registered without URLs (no route-map entry) aren't discovered statically — they surface through agent exploration instead.
+- The interactive phases need a macOS host with the iOS simulator; a web fallback exists for capture but not for tap recording.
+
+MIT © Aleksander Mikucki

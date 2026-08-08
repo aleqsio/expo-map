@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+
+# generated map outputs
+.expo-map/
+
+# demo bundle may contain personal captures — opt in deliberately
+apps/visualiser/public/demo.appmap
