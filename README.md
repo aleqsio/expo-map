@@ -46,7 +46,7 @@ npm install
 npm run dev
 ```
 
-Drop a `.appmap` bundle on the landing page. To bake in a demo bundle, place one at `apps/visualiser/public/demo.appmap` (git-ignored by default — bundles contain real screenshots of whatever account was signed in, so publish deliberately).
+Drop a `.appmap` bundle on the landing page. A demo bundle (a full Bluesky map: 70 screens, 126 flows) ships in `public/demo.appmap` — the hosted instance loads it via the "load the demo bundle" button.
 
 ## Repo layout
 

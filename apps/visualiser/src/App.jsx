@@ -599,7 +599,12 @@ export default function App() {
 
   useEffect(() => {
     fetch('demo.appmap', { method: 'HEAD' })
-      .then((res) => setDemoAvailable(res.ok && /zip|octet-stream/.test(res.headers.get('content-type') ?? '')))
+      .then((res) => {
+        const type = res.headers.get('content-type') ?? ''
+        const size = parseInt(res.headers.get('content-length') ?? '0', 10)
+        // a real bundle, not an SPA-fallback index.html
+        setDemoAvailable(res.ok && !type.includes('text/html') && (size > 10000 || /zip|octet-stream/.test(type)))
+      })
       .catch(() => {})
   }, [])
 

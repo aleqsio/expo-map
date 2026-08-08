@@ -5,6 +5,3 @@ dist/
 
 # generated map outputs
 .expo-map/
-
-# demo bundle may contain personal captures — opt in deliberately
-apps/visualiser/public/demo.appmap
