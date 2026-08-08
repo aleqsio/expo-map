@@ -404,6 +404,27 @@ button, .drop-zone, .label, .badge-row, .state-tag, .flow-group, .stats, .brand,
 .stats { display: flex; gap: 14px; color: var(--muted); font-size: 12px; }
 .stats b { color: var(--fg); font-variant-numeric: tabular-nums; }
 
+.open-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  min-height: 32px;
+  border-radius: 99px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition-property: background-color, color, scale;
+  transition-duration: 0.18s;
+  transition-timing-function: var(--ease);
+}
+.open-chip:hover { background-color: rgba(255, 255, 255, 0.1); color: var(--fg); }
+.open-chip:active { scale: 0.96; }
+.open-chip input { display: none; }
+
 .flows-panel {
   top: 88px; left: 16px;
   width: 252px;

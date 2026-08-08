@@ -21,7 +21,7 @@ function statusBadge(node) {
   return null
 }
 
-function Graph({ bundle }) {
+function Graph({ bundle, onOpenBuffer }) {
   const { manifest, map, images } = bundle
   const [positions, setPositions] = useState(null)
   const [selectedFlow, setSelectedFlow] = useState(null)
@@ -427,6 +427,18 @@ function Graph({ bundle }) {
           <span><b>{stats.captured}</b> captured</span>
           <span><b>{stats.flows}</b> flows</span>
         </div>
+        <label className="open-chip" title="open a different .appmap bundle">
+          <input
+            type="file"
+            accept=".appmap,.zip"
+            onChange={async (e) => {
+              const f = e.target.files?.[0]
+              if (f) onOpenBuffer(await f.arrayBuffer())
+              e.target.value = ''
+            }}
+          />
+          ⇆ open .appmap
+        </label>
       </header>
 
       <aside className={`hud flows-panel ${flowsOpen ? '' : 'collapsed'}`}>
@@ -467,13 +479,19 @@ function Graph({ bundle }) {
                 setSelectedFlow(f.name)
                 setStep(Math.max(0, (f.steps?.length ?? 1) - 1))
               }
+              // mode semantics: any interactive flow (nav-* or a recorded
+              // interaction) is "navigate" mode; visit-* is "deep link"
+              const isVisit = flow.name.startsWith('visit-')
               return (
                 <div className="ph-toggle">
-                  {nav && (
-                    <button className={!neighboursMode && flow.name === nav.name ? 'on' : ''} onClick={() => pick(nav)}>navigate</button>
+                  {(nav || !isVisit) && (
+                    <button
+                      className={!neighboursMode && !isVisit ? 'on' : ''}
+                      onClick={() => nav && pick(nav)}
+                    >navigate</button>
                   )}
                   {visit && (
-                    <button className={!neighboursMode && flow.name === visit.name ? 'on' : ''} onClick={() => pick(visit)}>deep link</button>
+                    <button className={!neighboursMode && isVisit ? 'on' : ''} onClick={() => pick(visit)}>deep link</button>
                   )}
                   <button className={neighboursMode ? 'on' : ''} onClick={() => setNeighboursMode(true)}>neighbours</button>
                 </div>
@@ -596,14 +614,23 @@ export default function App() {
   const [dragging, setDragging] = useState(false)
   const [busy, setBusy] = useState(false)
   const [demoAvailable, setDemoAvailable] = useState(false)
+  const [gen, setGen] = useState(0)
 
+  // when a demo bundle ships with the deployment, open it straight away —
+  // the landing page is only for instances with nothing baked in
   useEffect(() => {
     fetch('demo.appmap', { method: 'HEAD' })
-      .then((res) => {
+      .then(async (res) => {
         const type = res.headers.get('content-type') ?? ''
         const size = parseInt(res.headers.get('content-length') ?? '0', 10)
         // a real bundle, not an SPA-fallback index.html
-        setDemoAvailable(res.ok && !type.includes('text/html') && (size > 10000 || /zip|octet-stream/.test(type)))
+        const ok = res.ok && !type.includes('text/html') && (size > 10000 || /zip|octet-stream/.test(type))
+        setDemoAvailable(ok)
+        if (ok) {
+          const buf = await (await fetch('demo.appmap')).arrayBuffer()
+          const demo = await loadBundle(buf)
+          setBundle((cur) => cur ?? demo) // never clobber a user-opened bundle
+        }
       })
       .catch(() => {})
   }, [])
@@ -612,6 +639,7 @@ export default function App() {
     setBusy(true)
     try {
       setBundle(await loadBundle(buffer))
+      setGen((g) => g + 1) // remount the graph with clean selection state
       setError(null)
     } catch (e) {
       setError(String(e.message ?? e))
@@ -632,8 +660,8 @@ export default function App() {
 
   if (bundle)
     return (
-      <ReactFlowProvider>
-        <Graph bundle={bundle} />
+      <ReactFlowProvider key={gen}>
+        <Graph bundle={bundle} onOpenBuffer={open} />
       </ReactFlowProvider>
     )
 
