@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/diffs", "destination": "/index.html" },
+    { "source": "/diffs/:path*", "destination": "/index.html" }
+  ]
+}

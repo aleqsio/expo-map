@@ -797,7 +797,7 @@ export default function App() {
   // the landing page is only for instances with nothing baked in. It also
   // serves as the backdrop for a dropped .appmapdiff of the same app.
   useEffect(() => {
-    fetch('demo.appmap', { method: 'HEAD' })
+    fetch('/demo.appmap', { method: 'HEAD' })
       .then(async (res) => {
         const type = res.headers.get('content-type') ?? ''
         const size = parseInt(res.headers.get('content-length') ?? '0', 10)
@@ -805,10 +805,24 @@ export default function App() {
         const ok = res.ok && !type.includes('text/html') && (size > 10000 || /zip|octet-stream/.test(type))
         setDemoAvailable(ok)
         if (ok) {
-          const buf = await (await fetch('demo.appmap')).arrayBuffer()
+          const buf = await (await fetch('/demo.appmap')).arrayBuffer()
           const demo = await loadBundle(buf)
           setPlain((cur) => cur ?? demo) // never clobber a user-opened bundle
         }
+      })
+      .catch(() => {})
+  }, [])
+
+  // /diffs deep link: auto-open the shipped demo .appmapdiff — it overlays the
+  // demo map backdrop loaded above once both are in
+  useEffect(() => {
+    if (!/^\/diffs\/?$/.test(window.location.pathname)) return
+    fetch('/demo.appmapdiff')
+      .then(async (res) => {
+        const type = res.headers.get('content-type') ?? ''
+        if (!res.ok || type.includes('text/html')) return
+        const b = await loadBundle(await res.arrayBuffer())
+        if (b.diff) setDiffBundle((cur) => cur ?? b)
       })
       .catch(() => {})
   }, [])
@@ -894,7 +908,7 @@ export default function App() {
             className="demo-btn"
             disabled={busy}
             onClick={async () => {
-              const res = await fetch('demo.appmap')
+              const res = await fetch('/demo.appmap')
               open(await res.arrayBuffer())
             }}
           >
