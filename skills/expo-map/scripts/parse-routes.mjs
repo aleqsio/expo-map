@@ -42,6 +42,22 @@ function rel(p) {
   return path.relative(projectRoot, p).split(path.sep).join('/')
 }
 
+function readAppName() {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(projectRoot, "app.json"), "utf8"))
+    const n = cfg.expo?.name ?? cfg.name
+    if (n) return n
+  } catch {}
+  for (const f of ["app.config.js", "app.config.ts"]) {
+    try {
+      const src = fs.readFileSync(path.join(projectRoot, f), "utf8")
+      const m = src.match(/\\bname\\s*:\\s*["\x27]([^"\x27]+)["\x27]/)
+      if (m) return m[1]
+    } catch {}
+  }
+  return path.basename(projectRoot)
+}
+
 function readScheme() {
   try {
     const cfg = JSON.parse(fs.readFileSync(path.join(projectRoot, 'app.json'), 'utf8'))
@@ -73,6 +89,7 @@ function routeMatcher(urlPath) {
 }
 
 const SHEET_LIBS = [
+  ['@expo/ui/community/bottom-sheet', 'expo-ui-bottom-sheet'],
   ['@gorhom/bottom-sheet', 'gorhom-bottom-sheet'],
   ['react-native-actions-sheet', 'actions-sheet'],
   ['@lodev09/react-native-true-sheet', 'true-sheet'],
@@ -354,6 +371,7 @@ const scheme = readScheme()
 const graph = {
   generatedAt: new Date().toISOString(),
   projectRoot,
+  appName: readAppName(),
   scheme,
   deepLinkTemplates: {
     devBuild: scheme ? `${scheme}://<urlPath minus leading slash>` : null,
