@@ -193,7 +193,9 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
     (id) => {
       const pos = positions?.[id]
       if (!pos) return
-      const zoom = Math.max(getZoom(), Math.min(1.8, (window.innerHeight * 0.85) / NODE_H))
+      // match the gentle non-diff focus: node at ~60% of viewport height, never
+      // past 1.1×, and never zooming OUT if the user is already in closer
+      const zoom = Math.max(getZoom(), Math.min(1.1, (window.innerHeight * 0.6) / NODE_H))
       setCenter(pos.x + NODE_W / 2, pos.y + NODE_H / 2, { zoom, duration: 500 })
     },
     [positions, setCenter, getZoom]
