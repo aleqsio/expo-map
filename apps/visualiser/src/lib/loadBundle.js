@@ -5,6 +5,9 @@ import { parse as parseYaml } from 'yaml'
 // v1 bundles inline JSON flows in map.json; v2 bundles ship argent flow YAML
 // (flows/*.yaml, runnable via `argent flow run`) plus .meta.json sidecars —
 // both load into the same internal flow shape.
+// .appmapdiff bundles (manifest.kind === "diff") load into the same shape plus
+// a `diff` field; base/head sides are merged into one graph with per-node and
+// per-edge diff annotations.
 export async function loadBundle(buffer) {
   const files = unzipSync(new Uint8Array(buffer))
   const text = (name) => {
@@ -13,6 +16,7 @@ export async function loadBundle(buffer) {
     return new TextDecoder().decode(f)
   }
   const manifest = JSON.parse(text('manifest.json'))
+  if (manifest.kind === 'diff') return loadDiffBundle(files, manifest, text)
   if (manifest.formatVersion !== 1 && manifest.formatVersion !== 2) {
     throw new Error(`unsupported formatVersion ${manifest.formatVersion}`)
   }
@@ -40,6 +44,99 @@ export async function loadBundle(buffer) {
     }
   }
   return { manifest, map, images }
+}
+
+// .appmapdiff → the internal bundle shape. Head is the primary graph; base-only
+// (removed) nodes and edges are merged in so the map shows what disappeared.
+// Screenshot paths get side-prefixed keys ("head/screens/…") into `images`.
+function loadDiffBundle(files, manifest, text) {
+  if (manifest.formatVersion !== 1) {
+    throw new Error(`unsupported diff formatVersion ${manifest.formatVersion}`)
+  }
+  const diff = JSON.parse(text('diff.json'))
+  const baseMap = JSON.parse(text('base/map.json'))
+  const headMap = JSON.parse(text('head/map.json'))
+
+  const images = new Map()
+  for (const [name, data] of Object.entries(files)) {
+    if (/^(base|head)\/screens\/.+\.(png|jpe?g|webp)$/i.test(name)) {
+      const ext = name.split('.').pop().toLowerCase().replace('jpg', 'jpeg')
+      images.set(name, URL.createObjectURL(new Blob([data], { type: `image/${ext}` })))
+    }
+  }
+
+  const nodeDiff = new Map(diff.nodes.map((n) => [n.id, n]))
+  // per-capture-state statuses: node id → { "" | stateName → {status, note} }
+  const stateDiff = {}
+  for (const s of diff.states ?? []) {
+    if (s.reason === 'hint') continue // advisory only — no capture to attach to
+    ;(stateDiff[s.node] ??= {})[s.name] = { status: s.status, note: s.note ?? null }
+  }
+  const sideCapture = (cap, side) => ({
+    ...cap,
+    screenshot: cap.screenshot ? `${side}/${cap.screenshot}` : null,
+    states: (cap.states ?? []).map((s) => ({ ...s, screenshot: `${side}/${s.screenshot}` })),
+  })
+  const baseById = new Map(baseMap.nodes.map((n) => [n.id, n]))
+  const headIds = new Set(headMap.nodes.map((n) => n.id))
+  const nodes = headMap.nodes.map((n) => ({
+    ...n,
+    capture: sideCapture(n.capture, 'head'),
+    captureBase: baseById.has(n.id) ? sideCapture(baseById.get(n.id).capture, 'base') : null,
+    diff: nodeDiff.get(n.id) ?? null,
+    stateDiff: stateDiff[n.id] ?? null,
+  }))
+  for (const b of baseMap.nodes.filter((n) => !headIds.has(n.id))) {
+    nodes.push({
+      ...b,
+      capture: sideCapture(b.capture, 'base'),
+      captureBase: null,
+      diff: nodeDiff.get(b.id) ?? { id: b.id, status: 'D', reason: 'route-removed' },
+      stateDiff: stateDiff[b.id] ?? null,
+    })
+  }
+
+  // edge diff at from→to pair granularity (what the graph can draw)
+  const pairKey = (e) => `${e.from}→${e.to}`
+  const addedPairs = new Set(diff.edges.filter((e) => e.status === 'A').map(pairKey))
+  const headPairs = new Set(headMap.edges.filter((e) => e.to).map(pairKey))
+  const edges = headMap.edges
+    .filter((e) => e.to)
+    .map((e) => ({ ...e, diffStatus: addedPairs.has(pairKey(e)) ? 'A' : null }))
+  for (const e of baseMap.edges.filter((x) => x.to && !headPairs.has(pairKey(x)))) {
+    edges.push({ ...e, diffStatus: 'D' })
+  }
+
+  return { manifest, map: { nodes, edges, flows: [] }, images, diff }
+}
+
+// Overlay a diff bundle on a full .appmap of the same app: every node keeps its
+// diff annotation, but nodes the diff didn't capture (unchanged screens) borrow
+// their screenshot and state variants from the plain bundle. Image keys don't
+// collide — plain uses "screens/…", diff uses "base|head/screens/…".
+export function mergeBundles(plain, diff) {
+  const plainById = new Map(plain.map.nodes.map((n) => [n.id, n]))
+  const nodes = diff.map.nodes.map((n) => {
+    const p = plainById.get(n.id)
+    if (!p) return n
+    const capture = n.capture.screenshot
+      ? n.capture
+      : { ...p.capture, states: p.capture.states ?? [] }
+    // union state variants by name; diff-side (head) wins on collision
+    const have = new Set((capture.states ?? []).map((s) => s.name))
+    const states = [
+      ...(capture.states ?? []),
+      ...(capture === n.capture ? (p.capture.states ?? []).filter((s) => !have.has(s.name)) : []),
+    ].sort((a, b) => a.name.localeCompare(b.name))
+    return { ...n, capture: { ...capture, states } }
+  })
+  return {
+    manifest: diff.manifest,
+    map: { nodes, edges: diff.map.edges, flows: [] },
+    images: new Map([...plain.images, ...diff.images]),
+    diff: diff.diff,
+    backdrop: plain.manifest,
+  }
 }
 
 function selectorLabel(sel) {

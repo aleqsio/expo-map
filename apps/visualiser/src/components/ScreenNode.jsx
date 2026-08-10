@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from 'react'
 import { Handle, Position } from '@xyflow/react'
+import { visualDiff } from '../lib/visualDiff'
 
 const BROKEN = {
   'error-boundary': { icon: '⛌', label: 'crashes on deep link' },
@@ -15,13 +17,92 @@ function fixHint(node) {
   return 'Re-run the sweep for this route.'
 }
 
+const DIFF_TAG = { A: '+ added', M: '± changed', D: '− removed' }
+const STATE_DIFF = new Set(['A', 'M', 'D']) // 'unchanged' and null get no dot
+
+function StatusDot({ status }) {
+  if (!STATE_DIFF.has(status)) return null
+  return <span className={`st-dot st-${status.toLowerCase()}`} />
+}
+
+// Custom dropdown for a node's capture states. Each option carries a status
+// dot (amber = changed, green = added, red = removed); the trigger shows the
+// active state's dot and lights up amber when any state changed.
+function StatePicker({ states, active, baseDiffStatus, onSelect }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e) => {
+      if (!ref.current?.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [open])
+
+  const options = [
+    { name: '', label: 'base screen', diff: baseDiffStatus },
+    ...states.map((s) => ({ name: s.name, label: s.name, diff: s.diff ?? null })),
+  ]
+  const activeName = active ?? ''
+  const current = options.find((o) => o.name === activeName) ?? options[0]
+  const anyDiff = options.some((o) => STATE_DIFF.has(o.diff))
+
+  return (
+    <div
+      ref={ref}
+      className={`state-picker nodrag nopan ${anyDiff ? 'has-diff' : ''} ${open ? 'open' : ''}`}
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <button className="sp-trigger" onClick={() => setOpen((o) => !o)} title="switch displayed state">
+        <StatusDot status={current.diff} />
+        <span className="sp-label">{current.label}</span>
+        <span className="sp-chev">▾</span>
+      </button>
+      {open && (
+        <div className="sp-menu">
+          {options.map((o) => (
+            <button
+              key={o.name}
+              className={`sp-item ${o.name === activeName ? 'on' : ''}`}
+              onClick={() => {
+                onSelect?.(o.name)
+                setOpen(false)
+              }}
+            >
+              <span className="sp-check">{o.name === activeName ? '✓' : ''}</span>
+              <span className="sp-label">{o.label}</span>
+              <StatusDot status={o.diff} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ScreenNode({ data, selected }) {
-  const { node, img, states = [], badgeText, hue, dimmed, onPath, isCurrent, stateName, chosenState, gesture, onStateSelect } = data
+  const { node, img, imgBase = null, states = [], baseStates = [], badgeText, hue, dimmed, onPath, isCurrent, stateName, chosenState, gesture, onStateSelect, diffMode, diff, baseDiffStatus = null, flip = false } = data
   const broken = BROKEN[node.capture.status]
 
   // flow playback wins over the manual dropdown; '' = base capture
   const activeState = stateName ?? chosenState
   const shown = activeState ? states.find((s) => s.name === activeState)?.img ?? img : img
+
+  // in-place comparator for changed screens: alternate base/head on the shared
+  // 2s clock; on hover freeze and show the red changed-pixels render instead
+  const shownBase = activeState ? baseStates.find((s) => s.name === activeState)?.img ?? null : imgBase
+  const canSwap = diff?.status === 'M' && !!shown && !!shownBase
+  const [hovered, setHovered] = useState(false)
+  const [diffImg, setDiffImg] = useState(null)
+  useEffect(() => {
+    if (!(hovered && canSwap)) { setDiffImg(null); return }
+    let live = true
+    visualDiff(shown, shownBase).then((d) => { if (live) setDiffImg(d) }, () => {})
+    return () => { live = false }
+  }, [hovered, canSwap, shown, shownBase])
+  const displayed = canSwap ? (hovered ? diffImg?.url ?? shown : flip ? shownBase : shown) : shown
 
   const cls = [
     'screen-node',
@@ -29,6 +110,7 @@ export default function ScreenNode({ data, selected }) {
     onPath ? 'on-path' : '',
     isCurrent ? 'current' : '',
     selected ? 'selected' : '',
+    diff ? `diff-${diff.status.toLowerCase()}` : diffMode ? 'diff-unchanged' : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -36,9 +118,13 @@ export default function ScreenNode({ data, selected }) {
   return (
     <div className={cls} style={{ '--group-hue': hue }}>
       <Handle type="target" position={Position.Top} className="port" />
-      <div className={`phone ${broken ? 'broken' : ''}`}>
-        {shown ? (
-          <img src={shown} alt={node.urlPath} draggable={false} />
+      <div
+        className={`phone ${broken ? 'broken' : ''}`}
+        onMouseEnter={canSwap ? () => setHovered(true) : undefined}
+        onMouseLeave={canSwap ? () => setHovered(false) : undefined}
+      >
+        {displayed ? (
+          <img src={displayed} alt={node.urlPath} draggable={false} />
         ) : (
           <div className="no-shot">
             <span>{node.capture.status === 'missing' ? 'no capture' : node.capture.status}</span>
@@ -73,25 +159,28 @@ export default function ScreenNode({ data, selected }) {
           </svg>
         )}
         {stateName && <div className="state-tag">{stateName}</div>}
+        {diff && <div className={`diff-tag chg-${diff.status.toLowerCase()}`}>{DIFF_TAG[diff.status]}</div>}
+        {canSwap && (
+          <div className={`swap-tag ${hovered ? 'delta' : flip ? 'base' : 'head'}`}>
+            {hovered
+              ? diffImg
+                ? `Δ ${diffImg.changed} changed${diffImg.moved ? ` · ${diffImg.moved} moved` : ''}`
+                : 'computing…'
+              : flip ? 'base' : 'head'}
+          </div>
+        )}
       </div>
       <div className="label">
         <span className="dot" />
         <span className="path" title={node.file ?? ''}>{node.urlPath}</span>
       </div>
       {states.length > 0 && !stateName && !isCurrent ? (
-        <select
-          className="state-select nodrag nopan"
-          value={activeState ?? ''}
-          onChange={(e) => onStateSelect?.(e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-          title="switch displayed state"
-        >
-          <option value="">base screen</option>
-          {states.map((s) => (
-            <option key={s.name} value={s.name}>{s.name}</option>
-          ))}
-        </select>
+        <StatePicker
+          states={states}
+          active={activeState}
+          baseDiffStatus={baseDiffStatus}
+          onSelect={onStateSelect}
+        />
       ) : states.length > 0 && (stateName || isCurrent) ? (
         <div className="state-select static" title="controlled by flow playback">
           {activeState ?? 'base screen'}

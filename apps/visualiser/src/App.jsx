@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Background, Controls, MarkerType, MiniMap, ReactFlow, useReactFlow, ReactFlowProvider } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import ScreenNode from './components/ScreenNode'
-import { flowResolution, isInteractive, loadBundle } from './lib/loadBundle'
+import { flowResolution, isInteractive, loadBundle, mergeBundles } from './lib/loadBundle'
 import { layoutGraph, NODE_H, NODE_W } from './lib/layout'
 import { flowForNode, replayCommand } from './lib/replay'
 
@@ -21,19 +21,44 @@ function statusBadge(node) {
   return null
 }
 
-function Graph({ bundle, onOpenBuffer }) {
-  const { manifest, map, images } = bundle
+const DIFF_LABEL = { A: 'added', M: 'changed', D: 'removed' }
+
+function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
+  const { manifest, map, images, diff } = bundle
+  const diffMode = !!diff
   const [positions, setPositions] = useState(null)
   const [selectedFlow, setSelectedFlow] = useState(null)
   const [step, setStep] = useState(0)
   const [selectedNode, setSelectedNode] = useState(null)
   const [selectedEdge, setSelectedEdge] = useState(null) // { key, from, to, raws }
-  const [chosenStates, setChosenStates] = useState({}) // nodeId → manually chosen state name
+  // nodeId → chosen state name. In diff mode, screens whose bare capture is
+  // unaffected but carry a changed state open ON that state — the change is
+  // visible immediately instead of hiding behind the dropdown.
+  const [chosenStates, setChosenStates] = useState(() => {
+    if (!diff) return {}
+    const init = {}
+    const changed = (s) => ['A', 'M', 'D'].includes(s?.status)
+    for (const n of map.nodes) {
+      if (!n.stateDiff || changed(n.stateDiff[''])) continue
+      const first = Object.entries(n.stateDiff).find(([name, sd]) => name !== '' && changed(sd))
+      if (first) init[n.id] = first[0]
+    }
+    return init
+  })
   const [neighboursMode, setNeighboursMode] = useState(false)
   const [toast, setToast] = useState(null)
   const [flowsOpen, setFlowsOpen] = useState(() => window.innerWidth > 900)
   const toastTimer = useRef(null)
   const { fitView, setCenter, getZoom } = useReactFlow()
+
+  // shared clock for the in-place base/head comparator on changed screens —
+  // one interval so every node flips in sync
+  const [flip, setFlip] = useState(false)
+  useEffect(() => {
+    if (!diffMode) return
+    const t = setInterval(() => setFlip((f) => !f), 1000)
+    return () => clearInterval(t)
+  }, [diffMode])
 
   const { paths, nodeAtStep } = useMemo(() => flowResolution(map), [map])
   const routeById = useMemo(() => Object.fromEntries(map.nodes.map((n) => [n.id, n])), [map])
@@ -161,6 +186,19 @@ function Graph({ bundle, onOpenBuffer }) {
     }
   }, [flow, step])
 
+  // focus a node by panning/zooming straight to its layout position — bypasses
+  // fitView, which silently no-ops in some store states; setCenter (the same
+  // primitive the minimap uses) always lands
+  const focusNode = useCallback(
+    (id) => {
+      const pos = positions?.[id]
+      if (!pos) return
+      const zoom = Math.max(getZoom(), Math.min(1.8, (window.innerHeight * 0.85) / NODE_H))
+      setCenter(pos.x + NODE_W / 2, pos.y + NODE_H / 2, { zoom, duration: 500 })
+    },
+    [positions, setCenter, getZoom]
+  )
+
   const showToast = useCallback((msg) => {
     clearTimeout(toastTimer.current)
     setToast(msg)
@@ -207,6 +245,20 @@ function Graph({ bundle, onOpenBuffer }) {
     if (!positions) return []
     return map.nodes.map((n) => {
       const override = stateOverrides[n.id]
+      // state options with their diff status; base-only (removed) variants are
+      // appended so the dropdown can still show what disappeared
+      const stateList = n.capture.states.map((s) => ({
+        name: s.name,
+        img: images.get(s.screenshot),
+        diff: n.stateDiff?.[s.name]?.status ?? null,
+      }))
+      if (diffMode && n.stateDiff) {
+        for (const [name, sd] of Object.entries(n.stateDiff)) {
+          if (name === '' || stateList.some((s) => s.name === name)) continue
+          const baseState = (n.captureBase?.states ?? []).find((s) => s.name === name)
+          if (baseState) stateList.push({ name, img: images.get(baseState.screenshot), diff: sd.status })
+        }
+      }
       return {
         id: n.id,
         type: 'screen',
@@ -217,12 +269,18 @@ function Graph({ bundle, onOpenBuffer }) {
         data: {
           node: n,
           img: n.capture.screenshot ? images.get(n.capture.screenshot) : null,
-          states: n.capture.states.map((s) => ({ name: s.name, img: images.get(s.screenshot) })),
+          imgBase: n.captureBase?.screenshot ? images.get(n.captureBase.screenshot) : null,
+          states: stateList,
+          baseStates: (n.captureBase?.states ?? []).map((s) => ({ name: s.name, img: images.get(s.screenshot) })),
+          baseDiffStatus: n.stateDiff?.['']?.status ?? null,
+          flip,
           stateName: override?.name ?? null,
           chosenState: chosenStates[n.id] ?? null,
           onStateSelect: (stateName) =>
             setChosenStates((prev) => ({ ...prev, [n.id]: stateName || undefined })),
           badgeText: statusBadge(n),
+          diffMode,
+          diff: n.diff ?? null,
           hue: hueFor(n.group || 'root'),
           dimmed: neighbourhood
             ? !neighbourhood.nodes.has(n.id)
@@ -241,7 +299,7 @@ function Graph({ bundle, onOpenBuffer }) {
         },
       }
     })
-  }, [positions, map, images, flow, path, currentNodeId, stateOverrides, selectedNode, chosenStates, selectedEdge, edgeGesture, neighbourhood, subjectId])
+  }, [positions, map, images, flow, path, currentNodeId, stateOverrides, selectedNode, chosenStates, selectedEdge, edgeGesture, neighbourhood, subjectId, diffMode, flip])
 
   const rfEdges = useMemo(() => {
     const infos = new Map()
@@ -251,6 +309,7 @@ function Graph({ bundle, onOpenBuffer }) {
       if (!infos.has(key)) infos.set(key, { key, from: e.from, to: e.to, raws: [] })
       const info = infos.get(key)
       if (e.raw && !info.raws.includes(e.raw)) info.raws.push(e.raw)
+      if (e.diffStatus) info.diffStatus = e.diffStatus
     }
     for (const oe of observedEdges) infos.set(oe.key, oe)
     const anySelection = !!flow || !!selectedEdge || !!neighbourhood
@@ -265,7 +324,7 @@ function Graph({ bundle, onOpenBuffer }) {
         source: info.from,
         target: info.to,
         animated: !!active,
-        className: `${active ? 'edge-on-path' : anySelection ? 'edge-faded' : 'edge-normal'}${info.observed ? ' edge-observed' : ''}`,
+        className: `${active ? 'edge-on-path' : anySelection ? 'edge-faded' : 'edge-normal'}${info.observed ? ' edge-observed' : ''}${info.diffStatus === 'A' ? ' edge-added' : info.diffStatus === 'D' ? ' edge-removed' : ''}`,
         markerEnd: {
           type: MarkerType.ArrowClosed,
           width: 16,
@@ -340,6 +399,15 @@ function Graph({ bundle, onOpenBuffer }) {
     captured: map.nodes.filter((n) => n.capture.screenshot && (n.capture.status ?? 'ok') === 'ok').length,
     flows: map.flows.length,
   }
+  const diffStats = diffMode
+    ? {
+        A: diff.nodes.filter((n) => n.status === 'A').length,
+        M: diff.nodes.filter((n) => n.status === 'M').length,
+        D: diff.nodes.filter((n) => n.status === 'D').length,
+        edges: diff.edges.length,
+      }
+    : null
+  const selectedDiffNode = diffMode && selectedNode ? map.nodes.find((n) => n.id === selectedNode) : null
 
   if (!positions) return <div className="loading">laying out {map.nodes.length} screens…</div>
 
@@ -375,7 +443,10 @@ function Graph({ bundle, onOpenBuffer }) {
             setStep(Math.max(0, (f.steps?.length ?? 1) - 1))
           } else {
             setSelectedFlow(null)
-            fitView({ nodes: [{ id: n.id }], padding: 0.6, duration: 500, maxZoom: 1.1 })
+            // diff review wants the screen big enough to actually read the
+            // base⇄head flip; plain maps keep the gentler context zoom
+            if (diffMode) focusNode(n.id)
+            else fitView({ nodes: [{ id: n.id }], padding: 0.6, duration: 500, maxZoom: 1.1 })
           }
         }}
         onPaneClick={() => {
@@ -415,38 +486,89 @@ function Graph({ bundle, onOpenBuffer }) {
         <div className="brand">
           <span className="mark" />
           <div>
-            <h1>{manifest.app.name}</h1>
+            <h1>
+              {manifest.app.name}
+              {diffMode && (
+                <span className="diff-mode-tag">
+                  {manifest.pr ? `PR #${manifest.pr.number}` : 'diff'}
+                </span>
+              )}
+            </h1>
             <p className="sub">
-              {manifest.app.mode} · {manifest.app.device ?? 'unknown device'} ·{' '}
-              {new Date(manifest.generatedAt).toLocaleDateString()}
+              {diffMode
+                ? `${manifest.pr?.title ??
+                    `${(manifest.base?.commit ?? 'base').slice(0, 7)} → ${(manifest.head?.commit ?? 'head').slice(0, 7)}`}${bundle.backdrop ? ' · over full map' : ''}`
+                : `${manifest.app.mode} · ${manifest.app.device ?? 'unknown device'} · ${new Date(manifest.generatedAt).toLocaleDateString()}`}
             </p>
           </div>
         </div>
-        <div className="stats">
-          <span><b>{stats.screens}</b> screens</span>
-          <span><b>{stats.captured}</b> captured</span>
-          <span><b>{stats.flows}</b> flows</span>
-        </div>
-        <label className="open-chip" title="open a different .appmap bundle">
+        {diffMode ? (
+          <div className="stats">
+            <span className="diff-a"><b>+{diffStats.A}</b> added</span>
+            <span className="diff-m"><b>±{diffStats.M}</b> changed</span>
+            <span className="diff-d"><b>−{diffStats.D}</b> removed</span>
+            <span><b>{diffStats.edges}</b> edge{diffStats.edges === 1 ? '' : 's'}</span>
+          </div>
+        ) : (
+          <div className="stats">
+            <span><b>{stats.screens}</b> screens</span>
+            <span><b>{stats.captured}</b> captured</span>
+            <span><b>{stats.flows}</b> flows</span>
+          </div>
+        )}
+        <label className="open-chip" title="open a different .appmap or .appmapdiff bundle">
           <input
             type="file"
-            accept=".appmap,.zip"
+            accept=".appmap,.appmapdiff,.zip"
             onChange={async (e) => {
               const f = e.target.files?.[0]
               if (f) onOpenBuffer(await f.arrayBuffer())
               e.target.value = ''
             }}
           />
-          ⇆ open .appmap
+          ⇆ open bundle
         </label>
+        {diffMode && (
+          <button className="open-chip" title="close the diff overlay" onClick={onCloseDiff}>
+            ✕ close diff
+          </button>
+        )}
       </header>
 
       <aside className={`hud flows-panel ${flowsOpen ? '' : 'collapsed'}`}>
         <button className="panel-head" onClick={() => setFlowsOpen((o) => !o)}>
-          <h2>Agent flows</h2>
+          <h2>{diffMode ? 'Changes' : 'Agent flows'}</h2>
           <span className="chev">{flowsOpen ? '−' : '+'}</span>
         </button>
-        {flowsOpen && (
+        {flowsOpen && diffMode && (
+          <div className="flow-list">
+            {diff.nodes.map((d) => (
+              <button
+                key={d.id}
+                className={`flow-item ${selectedNode === d.id ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.currentTarget.blur()
+                  setSelectedEdge(null)
+                  setSelectedNode(d.id)
+                  focusNode(d.id)
+                }}
+                title={d.reason}
+              >
+                <span className={`chg-badge chg-${d.status.toLowerCase()}`}>
+                  {d.status === 'A' ? '+' : d.status === 'D' ? '−' : '±'}
+                </span>
+                <span className="flow-name">{routeById[d.id]?.urlPath ?? d.id}</span>
+              </button>
+            ))}
+            {diff.broadFiles?.length > 0 && (
+              <p className="broad-note" title={diff.broadFiles.map((b) => b.file).join('\n')}>
+                {diff.broadFiles.length} broadly-imported changed file
+                {diff.broadFiles.length === 1 ? '' : 's'} excluded from suspect marking
+              </p>
+            )}
+          </div>
+        )}
+        {flowsOpen && !diffMode && (
           <div className="flow-list">
             {interactiveFlows.map((f) => (
               <button
@@ -545,9 +667,53 @@ function Graph({ bundle, onOpenBuffer }) {
         </footer>
       )}
 
+      {selectedDiffNode && !selectedEdge && (
+        <footer className="hud diff-card">
+          <div className="tc-route">
+            {selectedDiffNode.diff && (
+              <span className={`chg-badge chg-${selectedDiffNode.diff.status.toLowerCase()}`}>
+                {selectedDiffNode.diff.status === 'A' ? '+' : selectedDiffNode.diff.status === 'D' ? '−' : '±'}
+              </span>
+            )}
+            <span className="tc-screen">{selectedDiffNode.urlPath}</span>
+            <span className="dc-status">
+              {selectedDiffNode.diff ? DIFF_LABEL[selectedDiffNode.diff.status] : 'unchanged in this diff'}
+            </span>
+          </div>
+          {selectedDiffNode.diff?.note && <p className="dc-note">{selectedDiffNode.diff.note}</p>}
+          {selectedDiffNode.diff && (
+            <div className="tc-triggers">
+              <span className="tc-file">{selectedDiffNode.diff.reason}</span>
+              {(selectedDiffNode.diff.via ?? []).map((f) => (
+                <code key={f}>{f}</code>
+              ))}
+            </div>
+          )}
+          {(() => {
+            const marks = { A: '+', M: '±', D: '−' }
+            const states = (diff.states ?? []).filter((s) => s.node === selectedDiffNode.id && marks[s.status])
+            if (!states.length) return null
+            return (
+              <div className="tc-triggers">
+                {states.map((s) => (
+                  <code key={s.name + s.status} className={`chg-${s.status.toLowerCase()}`} title={s.note ?? undefined}>
+                    {marks[s.status]} {s.name === '' ? 'base screen' : s.name}
+                  </code>
+                ))}
+              </div>
+            )
+          })()}
+        </footer>
+      )}
+
       {selectedEdge && !flow && (
         <footer className="hud transition-card">
           <div className="tc-route">
+            {selectedEdge.diffStatus && (
+              <span className={`chg-badge chg-${selectedEdge.diffStatus.toLowerCase()}`}>
+                {selectedEdge.diffStatus === 'A' ? '+' : '−'}
+              </span>
+            )}
             <span className="tc-screen">{routeById[selectedEdge.from]?.urlPath ?? selectedEdge.from}</span>
             <span className="tc-arrow">⟶</span>
             <span className="tc-screen">{routeById[selectedEdge.to]?.urlPath ?? selectedEdge.to}</span>
@@ -609,15 +775,27 @@ function Graph({ bundle, onOpenBuffer }) {
 }
 
 export default function App() {
-  const [bundle, setBundle] = useState(null)
+  // a plain .appmap and an .appmapdiff can be loaded side by side: the diff is
+  // rendered overlaid on the plain bundle's captures (unchanged screens dimmed
+  // but showing their real screenshots) whenever both describe the same app
+  const [plain, setPlain] = useState(null)
+  const [diffBundle, setDiffBundle] = useState(null)
   const [error, setError] = useState(null)
   const [dragging, setDragging] = useState(false)
   const [busy, setBusy] = useState(false)
   const [demoAvailable, setDemoAvailable] = useState(false)
   const [gen, setGen] = useState(0)
 
+  const bundle = useMemo(() => {
+    if (!diffBundle) return plain
+    if (plain && plain.manifest.app.name === diffBundle.manifest.app.name)
+      return mergeBundles(plain, diffBundle)
+    return diffBundle
+  }, [plain, diffBundle])
+
   // when a demo bundle ships with the deployment, open it straight away —
-  // the landing page is only for instances with nothing baked in
+  // the landing page is only for instances with nothing baked in. It also
+  // serves as the backdrop for a dropped .appmapdiff of the same app.
   useEffect(() => {
     fetch('demo.appmap', { method: 'HEAD' })
       .then(async (res) => {
@@ -629,7 +807,7 @@ export default function App() {
         if (ok) {
           const buf = await (await fetch('demo.appmap')).arrayBuffer()
           const demo = await loadBundle(buf)
-          setBundle((cur) => cur ?? demo) // never clobber a user-opened bundle
+          setPlain((cur) => cur ?? demo) // never clobber a user-opened bundle
         }
       })
       .catch(() => {})
@@ -638,7 +816,9 @@ export default function App() {
   const open = useCallback(async (buffer) => {
     setBusy(true)
     try {
-      setBundle(await loadBundle(buffer))
+      const loaded = await loadBundle(buffer)
+      if (loaded.diff) setDiffBundle(loaded)
+      else setPlain(loaded)
       setGen((g) => g + 1) // remount the graph with clean selection state
       setError(null)
     } catch (e) {
@@ -658,10 +838,32 @@ export default function App() {
     [open]
   )
 
+  // dropping a bundle anywhere — including over an already-open graph — loads
+  // it; without this the browser's default kicks in and downloads the file
+  useEffect(() => {
+    const over = (e) => e.preventDefault()
+    const drop = async (e) => {
+      if (e.defaultPrevented) return // the landing drop zone already took it
+      e.preventDefault()
+      const f = e.dataTransfer?.files?.[0]
+      if (f) open(await f.arrayBuffer())
+    }
+    document.addEventListener('dragover', over)
+    document.addEventListener('drop', drop)
+    return () => {
+      document.removeEventListener('dragover', over)
+      document.removeEventListener('drop', drop)
+    }
+  }, [open])
+
   if (bundle)
     return (
       <ReactFlowProvider key={gen}>
-        <Graph bundle={bundle} onOpenBuffer={open} />
+        <Graph
+          bundle={bundle}
+          onOpenBuffer={open}
+          onCloseDiff={() => { setDiffBundle(null); setGen((g) => g + 1) }}
+        />
       </ReactFlowProvider>
     )
 
@@ -675,11 +877,11 @@ export default function App() {
       <div className="landing-card">
         <span className="mark big" />
         <h1>appmap visualiser</h1>
-        <p>Drop an <code>.appmap</code> bundle to explore your app as a living map — every screen, every link, every agent flow.</p>
+        <p>Drop an <code>.appmap</code> bundle to explore your app as a living map — every screen, every link, every agent flow. Or drop an <code>.appmapdiff</code> to review what a PR changed.</p>
         <label className="drop-zone">
           <input
             type="file"
-            accept=".appmap,.zip"
+            accept=".appmap,.appmapdiff,.zip"
             onChange={async (e) => {
               const f = e.target.files?.[0]
               if (f) open(await f.arrayBuffer())

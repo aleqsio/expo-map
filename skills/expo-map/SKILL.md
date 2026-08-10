@@ -1,13 +1,13 @@
 ---
 name: expo-map
-description: Generate a visual navigation map of an Expo app. Statically parses expo-router routes and links for full coverage, then deep-links through every screen in the iOS simulator capturing screenshots — including runtime states like bottom sheet snap points and modals — and renders a self-contained HTML map. Use when the user asks to map an Expo/React Native app's navigation, screens, or routes, or wants a visual sitemap of their app.
+description: Generate a visual navigation map of an Expo app. Statically parses expo-router routes and links for full coverage, then deep-links through every screen in the iOS simulator capturing screenshots — including runtime states like bottom sheet snap points and modals — and renders a self-contained HTML map. Also diffs two revisions into a PR preview (.appmapdiff) showing which screens/edges were added, removed, or changed. Use when the user asks to map an Expo/React Native app's navigation, screens, or routes, wants a visual sitemap of their app, or wants to preview/review what a PR changes on-screen.
 ---
 
 # expo-map
 
 Produce a visual map of an Expo app's navigation: every expo-router route as a card with a screenshot, runtime state variants (bottom sheets at each snap point, modals), and navigation edges between screens.
 
-**Arguments:** optional path to the Expo project (default: current working directory). `--static` = skip the simulator phases and render a screenshot-less map.
+**Arguments:** optional path to the Expo project (default: current working directory). `--static` = skip the simulator phases and render a screenshot-less map. `pr <number>` or `diff <base>..<head>` = PR diff mode (see bottom).
 
 **Working directory contract:** all outputs go to `<project>/.expo-map/` — `graph.json`, `screens/*.png`, `flows/*.yaml` + `flows/*.meta.json`, `map.html`. Suggest adding `.expo-map/` to the project's `.gitignore` at the end.
 
@@ -147,6 +147,118 @@ npx @swmansion/argent flow run <project>/.expo-map/flows/<flow-name>.yaml
 ```
 
 Run that first (it needs no LLM and reports pass/fail per step). Fall back to manual replay only when argent isn't installed and can't be (`npx` unavailable) or when the flow fails and the user wants a diagnosis: execute the YAML steps yourself — `open-url`/`wait` via `xcrun simctl`, taps/swipes via the simulator MCP using the sidecar's `target` labels as the source of truth (recorded coordinates are hints that may have drifted). Verify each step with an MCP screenshot; if a target can't be found in 3 attempts, stop and report which step failed and what the screen showed instead. Same safety rules as Phase 5: never trigger destructive or submitting controls.
+
+## PR diff mode — `/expo-map pr <number>` or `/expo-map diff <base>..<head>`
+
+Preview what a change does to the app's navigation surface: which screens were **added,
+removed, or changed**, which edges appeared or vanished, with before/after screenshots.
+The deliverable is an `.appmapdiff` bundle (format: `docs/appmapdiff-format.md` in the
+skill repo) — the visualiser renders it with green/amber/red highlights, a Changes
+panel, and base-vs-head comparison per screen.
+
+Working directory: `<project>/.expo-map/diff/<slug>/` where slug is `pr-<number>` or
+`<base>..<head>`. Verdicts are **static-only** (a screen is "changed" iff the change
+set touches its file or import closure); screenshots are evidence for the reviewer,
+not input to the classification.
+
+### D1 — resolve the two revisions
+
+- PR form: `gh pr view <n> --json number,title,url,baseRefName,headRefName,mergeCommit,files`.
+  For a *merged* PR, head = the merge commit, base = its first parent (`<merge>^`).
+  For an open PR, `gh pr view --json headRefOid,baseRefOid`. Write `pr.json`
+  (`{number,title,url,baseSha,headSha,baseRef,headRef}`) and `changed-files.txt`
+  (`gh pr diff <n> --name-only`, or `git diff --name-only <base> <head>`).
+- Ref form: resolve both refs with `git rev-parse`; same files, no `number`.
+- Shallow clones: `git fetch --depth 1 origin <sha>` for any SHA the repo doesn't have.
+- **Native guard:** if changed files touch `ios/`, `android/`, `patches/`, or change
+  native deps in `package.json`, warn the user that the installed dev build may not
+  match both sides — JS-only diffs are the supported case. Proceed only if they accept.
+- The project must have a clean tree (or the user agrees to `git stash`). Remember the
+  original ref; **restore it at the end, always** — even after failures.
+
+### D2 — parse both sides, pick suspects
+
+```bash
+git -C <project> checkout --detach <baseSha>
+node <skill>/scripts/parse-routes.mjs <project>   # writes .expo-map/graph.json
+cp <project>/.expo-map/graph.json <diffDir>/base/graph.json
+git -C <project> checkout --detach <headSha>
+node <skill>/scripts/parse-routes.mjs <project>
+cp <project>/.expo-map/graph.json <diffDir>/head/graph.json
+node <skill>/scripts/diff-map.mjs suspects <diffDir> --project <project>
+```
+
+Read `suspects.json` and report the work-list to the user before capturing: N added,
+N removed, N modified (with reasons and via-files), plus any broad files excluded from
+expansion. That report alone is already a useful static preview — if the user asked
+for `--static`, skip to D4.
+
+Then read the PR's actual diff for each suspect's via-files and write
+`<diffDir>/notes.json` — `{ "<nodeId>": "what visibly changes on this screen" }`, one
+plain sentence per suspect (e.g. "Trending topic pills become full-width ranked rows").
+Viewers show this note on the screen's diff card; without it the card only says
+"file-touched", which tells a reviewer nothing.
+
+If reading the diff convinces you a statically-flagged suspect has **no visible
+change** (shared import only, pure refactor, code path that doesn't render there),
+use `{ "note": "why it's unaffected", "verdict": "unaffected" }` instead — pack drops
+it from the changed list into `diff.json`'s `dismissed` section (omitted from the
+viewer's Changes list, kept in the bundle for audit). You can also skip capturing that
+screen. Dismiss only on positive evidence from the diff, not on a hunch — when unsure,
+keep it and let the captures decide.
+
+Status is tracked **per capture state**, not just per screen. When a screen's change
+lives in one state (below the fold, inside a sheet), say so with per-state notes —
+`""` is the bare screen, other keys are variant names:
+
+```json
+"Settings": { "note": "A 'Beta features' row is added between Languages and Help.",
+  "states": {
+    "": { "note": "Top of the list is identical — the row is below the fold.", "verdict": "unaffected" },
+    "bottom": "New 'Beta features' row appears between Languages and Help." } }
+```
+
+The viewer marks each state in the node's dropdown (`± bottom` etc.), so capture the
+state variants that make the change visible (Phase 5 style) — a diff whose change is
+below the fold and has no scrolled state variant shows two identical screenshots.
+
+### D3 — targeted capture, base then head
+
+Boot the app (Phase 3), then freeze the status bar so both sides capture identically
+(clock noise otherwise pollutes every pixel comparison):
+
+```bash
+xcrun simctl status_bar booted override --time "9:41" --dataNetwork wifi --wifiMode active --wifiBars 3 --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100
+```
+
+Then for each side in order **base → head**:
+
+1. `git checkout --detach <sha>`, restart Metro (kill the background process, start
+   again), and relaunch the app; verify a deep link renders the right revision.
+2. Capture only the suspect list for that side (`side: both|base` for base,
+   `both|head` for head), Phase 4 style, into `<diffDir>/<side>/screens/<slug>.png`.
+   Same waits, same 4b review discipline; verdicts go to
+   `<diffDir>/<side>/capture-status.json`.
+3. For suspects with `stateHints` — and any state the diff added (`states` with
+   reason `hint`) — do a scoped Phase 5 pass so state variants land as
+   `<slug>--<state>.png` on the right side.
+
+Keep both sides comparable: same device, same account, same waits.
+
+### D4 — pack and deliver
+
+```bash
+for f in <diffDir>/{base,head}/screens/*.png; do sips -Z 800 "$f" >/dev/null; done
+node <skill>/scripts/diff-map.mjs pack <diffDir> --device "<device name>"
+```
+
+Restore the original ref. Send the `.appmapdiff` with SendUserFile; report the diff
+table (added/modified/removed screens, edge changes, state changes, broad-file blind
+spots, anything uncapturable). The bundle opens in the same visualiser as `.appmap`
+files (drag it in). If a full `.appmap` of the app exists, tell the user to load both —
+the visualiser overlays the diff on the full map, so unchanged screens keep their real
+screenshots (dimmed) and changed screens flip base⇄head in place (hover for a red
+changed-pixels render).
 
 ## Web fallback (no macOS simulator available, or user asks for web)
 
