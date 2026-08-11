@@ -46,7 +46,8 @@ const shotFiles = fs.existsSync(shotsDir)
   ? fs.readdirSync(shotsDir).filter((f) => /\.(png|jpe?g|webp)$/i.test(f))
   : []
 
-const appName = path.basename(graph.projectRoot ?? projectRoot)
+// projectRoot is often a worktree dir, which is not what the app is called.
+const appName = graph.appName ?? path.basename(graph.projectRoot ?? projectRoot)
 
 const nodes = graph.routes.map((r) => {
   const cs = captureStatus[r.id] ?? {}
