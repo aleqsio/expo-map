@@ -9,10 +9,22 @@
 //   changed — content actually differs → red box, changed pixels tinted red
 // Falls back to a plain red per-pixel render if OpenCV fails to load.
 import pixelmatch from 'pixelmatch'
+import opencvUrl from '@techstark/opencv-js/dist/opencv.js?url'
 
 const cache = new Map()
 let cvPromise = null
-const loadCv = () => (cvPromise ??= import('@techstark/opencv-js').then((m) => m.default))
+// Load OpenCV as a plain script asset, NOT a module import: its CJS export is
+// an emscripten ready-Promise that production bundler interop wraps in a Proxy,
+// which `await` rejects ("then called on incompatible receiver"). The UMD
+// browser branch sets window.cv to a real Promise we can await safely.
+const loadCv = () =>
+  (cvPromise ??= new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = opencvUrl
+    s.onload = () => Promise.resolve().then(() => window.cv).then(resolve, reject)
+    s.onerror = () => reject(new Error('opencv.js failed to load'))
+    document.head.appendChild(s)
+  }))
 
 const MIN_ISLAND_AREA = 60 // mask px after dilation — below this it's noise
 const SEARCH_PAD = 90 // how far a region is allowed to have moved (px)
