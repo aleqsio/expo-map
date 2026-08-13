@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Background, Controls, MarkerType, MiniMap, ReactFlow, useReactFlow, ReactFlowProvider } from '@xyflow/react'
+import { ChevronLeft, ChevronRight, Copy, Map as MapIcon, PanelLeftClose, PanelLeftOpen, RotateCcw, Sparkles, Upload, X } from 'lucide-react'
+import { toast as notify, Toaster } from 'sonner'
 import '@xyflow/react/dist/style.css'
 import ScreenNode from './components/ScreenNode'
+import { Badge } from './components/ui/badge'
+import { Button } from './components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './components/ui/dialog'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/ui/tooltip'
 import { flowResolution, isInteractive, loadBundle, mergeBundles } from './lib/loadBundle'
 import { layoutGraph, NODE_H, NODE_W } from './lib/layout'
 import { flowForNode, replayCommand } from './lib/replay'
@@ -46,9 +53,7 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
     return init
   })
   const [neighboursMode, setNeighboursMode] = useState(false)
-  const [toast, setToast] = useState(null)
   const [flowsOpen, setFlowsOpen] = useState(() => window.innerWidth > 900)
-  const toastTimer = useRef(null)
   const { fitView, setCenter, getZoom } = useReactFlow()
 
   // shared clock for the in-place base/head comparator on changed screens —
@@ -62,8 +67,8 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
 
   const { paths, nodeAtStep } = useMemo(() => flowResolution(map), [map])
   const routeById = useMemo(() => Object.fromEntries(map.nodes.map((n) => [n.id, n])), [map])
-  const flow = selectedFlow ? map.flows.find((f) => f.name === selectedFlow) : null
-  const path = flow ? paths[flow.name] ?? [] : []
+  const flow = useMemo(() => selectedFlow ? map.flows.find((f) => f.name === selectedFlow) : null, [selectedFlow, map])
+  const path = useMemo(() => flow ? paths[flow.name] ?? [] : [], [flow, paths])
 
   // transitions observed in flow recordings but absent from static analysis
   // (e.g. drawer links living in shared components) — permanent dashed edges
@@ -202,9 +207,7 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
   )
 
   const showToast = useCallback((msg) => {
-    clearTimeout(toastTimer.current)
-    setToast(msg)
-    toastTimer.current = setTimeout(() => setToast(null), 2600)
+    notify(msg)
   }, [])
 
   const [commandSheet, setCommandSheet] = useState(null)
@@ -301,7 +304,7 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
         },
       }
     })
-  }, [positions, map, images, flow, path, currentNodeId, stateOverrides, selectedNode, chosenStates, selectedEdge, edgeGesture, neighbourhood, subjectId, diffMode, flip])
+  }, [positions, map, images, flow, path, currentNodeId, stateOverrides, selectedNode, chosenStates, selectedEdge, edgeGesture, gesture, neighbourhood, subjectId, diffMode, flip])
 
   const rfEdges = useMemo(() => {
     const infos = new Map()
@@ -368,7 +371,7 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
   )
 
   useEffect(() => {
-    document.querySelector('.flow-item.active')?.scrollIntoView({ block: 'nearest' })
+    document.querySelector('[data-flow-item].active')?.scrollIntoView({ block: 'nearest' })
   }, [selectedFlow])
 
   // camera follows the playhead: every step focuses the screen it acts on
@@ -414,6 +417,7 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
   if (!positions) return <div className="loading">laying out {map.nodes.length} screens…</div>
 
   return (
+    <TooltipProvider delayDuration={250}>
     <div className="graph-root">
       <ReactFlow
         nodes={rfNodes}
@@ -484,19 +488,21 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
         />
       </ReactFlow>
 
-      <header className="hud hud-top">
-        <div className="brand">
-          <span className="mark" />
-          <div>
-            <h1>
+      <Card className="absolute left-4 top-4 z-10 flex-row items-center gap-5 rounded-xl bg-card/90 px-4 py-3 shadow-xl backdrop-blur-xl">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+            <MapIcon className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="flex items-center text-sm font-semibold tracking-tight">
               {manifest.app.name}
               {diffMode && (
-                <span className="diff-mode-tag">
+                <Badge variant="secondary" className="ml-2 border border-primary/20 bg-primary/10 text-[10px] text-primary">
                   {manifest.pr ? `PR #${manifest.pr.number}` : 'diff'}
-                </span>
+                </Badge>
               )}
             </h1>
-            <p className="sub">
+            <p className="max-w-72 truncate text-[11px] text-muted-foreground">
               {diffMode
                 ? `${manifest.pr?.title ??
                     `${(manifest.base?.commit ?? 'base').slice(0, 7)} → ${(manifest.head?.commit ?? 'head').slice(0, 7)}`}${bundle.backdrop ? ' · over full map' : ''}`
@@ -505,49 +511,58 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
           </div>
         </div>
         {diffMode ? (
-          <div className="stats">
-            <span className="diff-a"><b>+{diffStats.A}</b> added</span>
-            <span className="diff-m"><b>±{diffStats.M}</b> changed</span>
-            <span className="diff-d"><b>−{diffStats.D}</b> removed</span>
-            <span><b>{diffStats.edges}</b> edge{diffStats.edges === 1 ? '' : 's'}</span>
+          <div className="hidden items-center gap-3 text-xs text-muted-foreground lg:flex">
+            <span><b className="text-emerald-400">+{diffStats.A}</b> added</span>
+            <span><b className="text-amber-400">±{diffStats.M}</b> changed</span>
+            <span><b className="text-red-400">−{diffStats.D}</b> removed</span>
+            <span><b className="text-foreground">{diffStats.edges}</b> edge{diffStats.edges === 1 ? '' : 's'}</span>
           </div>
         ) : (
-          <div className="stats">
-            <span><b>{stats.screens}</b> screens</span>
-            <span><b>{stats.captured}</b> captured</span>
-            <span><b>{stats.flows}</b> flows</span>
+          <div className="hidden items-center gap-3 text-xs text-muted-foreground lg:flex">
+            <span><b className="text-foreground">{stats.screens}</b> screens</span>
+            <span><b className="text-foreground">{stats.captured}</b> captured</span>
+            <span><b className="text-foreground">{stats.flows}</b> flows</span>
           </div>
         )}
-        <label className="open-chip" title="open a different .appmap or .appmapdiff bundle">
-          <input
-            type="file"
-            accept=".appmap,.appmapdiff,.zip"
-            onChange={async (e) => {
-              const f = e.target.files?.[0]
-              if (f) onOpenBuffer(await f.arrayBuffer())
-              e.target.value = ''
-            }}
-          />
-          ⇆ open bundle
-        </label>
+        <Button variant="outline" size="sm" asChild>
+          <label className="cursor-pointer" title="open a different .appmap or .appmapdiff bundle">
+            <Upload />
+            Open bundle
+            <input
+              className="hidden"
+              type="file"
+              accept=".appmap,.appmapdiff,.zip"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                if (f) onOpenBuffer(await f.arrayBuffer())
+                e.target.value = ''
+              }}
+            />
+          </label>
+        </Button>
         {diffMode && (
-          <button className="open-chip" title="close the diff overlay" onClick={onCloseDiff}>
-            ✕ close diff
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon-sm" onClick={onCloseDiff}><X /></Button>
+            </TooltipTrigger>
+            <TooltipContent>Close diff</TooltipContent>
+          </Tooltip>
         )}
-      </header>
+      </Card>
 
-      <aside className={`hud flows-panel ${flowsOpen ? '' : 'collapsed'}`}>
-        <button className="panel-head" onClick={() => setFlowsOpen((o) => !o)}>
-          <h2>{diffMode ? 'Changes' : 'Agent flows'}</h2>
-          <span className="chev">{flowsOpen ? '−' : '+'}</span>
-        </button>
+      <Card className="absolute left-4 top-[84px] z-10 max-h-[calc(100%-112px)] w-64 gap-0 overflow-hidden rounded-xl bg-card/90 py-0 shadow-xl backdrop-blur-xl">
+        <Button variant="ghost" className="h-11 w-full justify-between rounded-none px-4" onClick={() => setFlowsOpen((o) => !o)}>
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{diffMode ? 'Changes' : 'Agent flows'}</span>
+          {flowsOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+        </Button>
         {flowsOpen && diffMode && (
-          <div className="flow-list">
+          <div className="overflow-y-auto px-2 pb-2">
             {diff.nodes.map((d) => (
-              <button
+              <Button
                 key={d.id}
-                className={`flow-item ${selectedNode === d.id ? 'active' : ''}`}
+                data-flow-item
+                variant="ghost"
+                className={`h-9 w-full justify-start px-2 text-xs ${selectedNode === d.id ? 'active bg-accent text-accent-foreground' : ''}`}
                 onClick={(e) => {
                   e.currentTarget.blur()
                   setSelectedEdge(null)
@@ -556,14 +571,14 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
                 }}
                 title={d.reason}
               >
-                <span className={`chg-badge chg-${d.status.toLowerCase()}`}>
+                <Badge variant="outline" className={`size-5 px-0 chg-${d.status.toLowerCase()}`}>
                   {d.status === 'A' ? '+' : d.status === 'D' ? '−' : '±'}
-                </span>
-                <span className="flow-name">{routeById[d.id]?.urlPath ?? d.id}</span>
-              </button>
+                </Badge>
+                <span className="truncate">{routeById[d.id]?.urlPath ?? d.id}</span>
+              </Button>
             ))}
             {diff.broadFiles?.length > 0 && (
-              <p className="broad-note" title={diff.broadFiles.map((b) => b.file).join('\n')}>
+              <p className="m-2 rounded-md border border-amber-400/20 bg-amber-400/10 p-2 text-[10px] leading-relaxed text-amber-300" title={diff.broadFiles.map((b) => b.file).join('\n')}>
                 {diff.broadFiles.length} broadly-imported changed file
                 {diff.broadFiles.length === 1 ? '' : 's'} excluded from suspect marking
               </p>
@@ -571,26 +586,28 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
           </div>
         )}
         {flowsOpen && !diffMode && (
-          <div className="flow-list">
+          <div className="overflow-y-auto px-2 pb-2">
             {interactiveFlows.map((f) => (
-              <button
+              <Button
                 key={f.name}
-                className={`flow-item ${selectedFlow === f.name ? 'active' : ''}`}
+                data-flow-item
+                variant="ghost"
+                className={`h-9 w-full justify-start px-2 text-xs ${selectedFlow === f.name ? 'active bg-accent text-accent-foreground' : ''}`}
                 onClick={(e) => { e.currentTarget.blur(); selectFlow(f.name) }}
                 title={f.title}
               >
-                <span className="flow-kind interactive">✦</span>
-                <span className="flow-name">{f.title ?? f.name}</span>
-              </button>
+                <Sparkles className="text-cyan-400" />
+                <span className="truncate">{f.title ?? f.name}</span>
+              </Button>
             ))}
           </div>
         )}
-      </aside>
+      </Card>
 
       {flow && (
-        <footer className="hud playhead">
-          <div className="ph-title">
-            <b>
+        <Card className="absolute bottom-4 left-1/2 z-10 w-[min(600px,calc(100vw-320px))] -translate-x-1/2 gap-3 rounded-xl bg-card/95 px-4 py-4 shadow-2xl backdrop-blur-xl max-[900px]:left-4 max-[900px]:w-[calc(100vw-32px)] max-[900px]:translate-x-0">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <b className="min-w-0 flex-1 truncate">
               {neighboursMode
                 ? `Neighbours of ${routeById[subjectId]?.urlPath ?? subjectId}`
                 : flow.title ?? flow.name}
@@ -607,49 +624,53 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
               // interaction) is "navigate" mode; visit-* is "deep link"
               const isVisit = flow.name.startsWith('visit-')
               return (
-                <div className="ph-toggle">
+                <div className="flex shrink-0 rounded-lg bg-muted p-1">
                   {(nav || !isVisit) && (
-                    <button
-                      className={!neighboursMode && !isVisit ? 'on' : ''}
+                    <Button
+                      variant={!neighboursMode && !isVisit ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="h-6 rounded-md px-2 text-[10px]"
                       onClick={() => nav && pick(nav)}
-                    >navigate</button>
+                    >Navigate</Button>
                   )}
                   {visit && (
-                    <button className={!neighboursMode && isVisit ? 'on' : ''} onClick={() => pick(visit)}>deep link</button>
+                    <Button variant={!neighboursMode && isVisit ? 'secondary' : 'ghost'} size="sm" className="h-6 rounded-md px-2 text-[10px]" onClick={() => pick(visit)}>Deep link</Button>
                   )}
-                  <button className={neighboursMode ? 'on' : ''} onClick={() => setNeighboursMode(true)}>neighbours</button>
+                  <Button variant={neighboursMode ? 'secondary' : 'ghost'} size="sm" className="h-6 rounded-md px-2 text-[10px]" onClick={() => setNeighboursMode(true)}>Neighbours</Button>
                 </div>
               )
             })()}
-            {!neighboursMode && <span className="ph-count">{stepView.pos + 1} / {stepView.visibleIdx.length}</span>}
+            {!neighboursMode && <span className="text-xs tabular-nums text-muted-foreground">{stepView.pos + 1} / {stepView.visibleIdx.length}</span>}
           </div>
           {neighboursMode ? (
-            <p className="ph-step">
+            <p className="truncate font-mono text-xs text-muted-foreground">
               {(neighbourhood?.nodes.size ?? 1) - 1} screen{(neighbourhood?.nodes.size ?? 1) - 1 === 1 ? '' : 's'} reachable
               in one action — highlighted with their edges
             </p>
           ) : (
             <>
-          <div className="ph-controls">
-            <button className="ph-replay" title="replay from the first step" onClick={() => setStep(stepView.effectiveEnd(0))} disabled={stepView.pos === 0}>↺</button>
-            <button onClick={() => setStep(stepView.effectiveEnd(Math.max(stepView.pos - 1, 0)))} disabled={stepView.pos === 0}>‹</button>
-            <div className="ph-dots">
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" title="replay from the first step" onClick={() => setStep(stepView.effectiveEnd(0))} disabled={stepView.pos === 0}><RotateCcw /></Button>
+            <Button variant="outline" size="icon" onClick={() => setStep(stepView.effectiveEnd(Math.max(stepView.pos - 1, 0)))} disabled={stepView.pos === 0}><ChevronLeft /></Button>
+            <div className="flex flex-1 flex-wrap justify-center gap-1">
               {stepView.visibleIdx.map((si, k) => (
                 <button
                   key={si}
-                  className={`ph-dot ${k === stepView.pos ? 'now' : k < stepView.pos ? 'done' : ''}`}
+                  className={`size-3 rounded-full border-2 border-card transition-colors ${k === stepView.pos ? 'bg-primary ring-2 ring-primary/30' : k < stepView.pos ? 'bg-primary/60' : 'bg-muted-foreground/25'}`}
                   onClick={() => setStep(stepView.effectiveEnd(k))}
                   title={flow.steps[si].action}
                 />
               ))}
             </div>
-            <button
+            <Button
+              variant="outline"
+              size="icon"
               onClick={() => setStep(stepView.effectiveEnd(Math.min(stepView.pos + 1, stepView.visibleIdx.length - 1)))}
               disabled={stepView.pos === stepView.visibleIdx.length - 1}
-            >›</button>
+            ><ChevronRight /></Button>
           </div>
-          <div className="ph-step-row">
-            <p className="ph-step">
+          <div className="flex items-center gap-3 border-t pt-3">
+            <p className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
               {(() => {
                 const describe = (st) => {
                   if (st.action === 'open_url') return `deep link ${st.url}`
@@ -662,32 +683,32 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
                   : `arrived — ${describe(stepView.visStep)}`
               })()}
             </p>
-            <button className="ph-copy" onClick={() => copyFlow(flow)}>Copy replay</button>
+            <Button size="sm" onClick={() => copyFlow(flow)}><Copy />Copy replay</Button>
           </div>
             </>
           )}
-        </footer>
+        </Card>
       )}
 
       {selectedDiffNode && !selectedEdge && (
-        <footer className="hud diff-card">
-          <div className="tc-route">
+        <Card className="absolute bottom-4 left-1/2 z-10 w-[min(560px,calc(100vw-320px))] -translate-x-1/2 gap-2 rounded-xl bg-card/95 px-4 py-4 shadow-2xl backdrop-blur-xl">
+          <div className="flex items-center gap-2 font-mono text-sm font-semibold">
             {selectedDiffNode.diff && (
-              <span className={`chg-badge chg-${selectedDiffNode.diff.status.toLowerCase()}`}>
+              <Badge variant="outline" className={`size-5 px-0 chg-${selectedDiffNode.diff.status.toLowerCase()}`}>
                 {selectedDiffNode.diff.status === 'A' ? '+' : selectedDiffNode.diff.status === 'D' ? '−' : '±'}
-              </span>
+              </Badge>
             )}
-            <span className="tc-screen">{selectedDiffNode.urlPath}</span>
-            <span className="dc-status">
+            <span className="truncate">{selectedDiffNode.urlPath}</span>
+            <span className="ml-auto shrink-0 font-sans text-xs font-normal text-muted-foreground">
               {selectedDiffNode.diff ? DIFF_LABEL[selectedDiffNode.diff.status] : 'unchanged in this diff'}
             </span>
           </div>
-          {selectedDiffNode.diff?.note && <p className="dc-note">{selectedDiffNode.diff.note}</p>}
+          {selectedDiffNode.diff?.note && <p className="text-sm leading-relaxed">{selectedDiffNode.diff.note}</p>}
           {selectedDiffNode.diff && (
-            <div className="tc-triggers">
-              <span className="tc-file">{selectedDiffNode.diff.reason}</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-mono text-[11px] text-muted-foreground">{selectedDiffNode.diff.reason}</span>
               {(selectedDiffNode.diff.via ?? []).map((f) => (
-                <code key={f}>{f}</code>
+                <Badge key={f} variant="secondary" className="font-mono text-[10px]">{f}</Badge>
               ))}
             </div>
           )}
@@ -696,66 +717,69 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
             const states = (diff.states ?? []).filter((s) => s.node === selectedDiffNode.id && marks[s.status])
             if (!states.length) return null
             return (
-              <div className="tc-triggers">
+              <div className="flex flex-wrap gap-1.5">
                 {states.map((s) => (
-                  <code key={s.name + s.status} className={`chg-${s.status.toLowerCase()}`} title={s.note ?? undefined}>
+                  <Badge key={s.name + s.status} variant="outline" className={`font-mono text-[10px] chg-${s.status.toLowerCase()}`} title={s.note ?? undefined}>
                     {marks[s.status]} {s.name === '' ? 'base screen' : s.name}
-                  </code>
+                  </Badge>
                 ))}
               </div>
             )
           })()}
-        </footer>
+        </Card>
       )}
 
       {selectedEdge && !flow && (
-        <footer className="hud transition-card">
-          <div className="tc-route">
+        <Card className="absolute bottom-4 left-1/2 z-10 w-[min(540px,calc(100vw-320px))] -translate-x-1/2 gap-2 rounded-xl bg-card/95 px-4 py-4 shadow-2xl backdrop-blur-xl">
+          <div className="flex items-center gap-2 font-mono text-sm font-semibold">
             {selectedEdge.diffStatus && (
-              <span className={`chg-badge chg-${selectedEdge.diffStatus.toLowerCase()}`}>
+              <Badge variant="outline" className={`size-5 px-0 chg-${selectedEdge.diffStatus.toLowerCase()}`}>
                 {selectedEdge.diffStatus === 'A' ? '+' : '−'}
-              </span>
+              </Badge>
             )}
-            <span className="tc-screen">{routeById[selectedEdge.from]?.urlPath ?? selectedEdge.from}</span>
-            <span className="tc-arrow">⟶</span>
-            <span className="tc-screen">{routeById[selectedEdge.to]?.urlPath ?? selectedEdge.to}</span>
+            <span className="truncate">{routeById[selectedEdge.from]?.urlPath ?? selectedEdge.from}</span>
+            <ChevronRight className="size-4 shrink-0 text-primary" />
+            <span className="truncate">{routeById[selectedEdge.to]?.urlPath ?? selectedEdge.to}</span>
           </div>
-          <div className="tc-triggers">
+          <div className="flex flex-wrap items-center gap-1.5">
             {selectedEdge.observed ? (
               <>
-                <span className="tc-file">not in static code analysis — observed by the agent in</span>
+                <span className="font-mono text-[11px] text-muted-foreground">not in static code analysis — observed by the agent in</span>
                 {selectedEdge.flows.slice(0, 3).map((f) => (
-                  <code key={f}>{f}</code>
+                  <Badge key={f} variant="secondary" className="font-mono text-[10px]">{f}</Badge>
                 ))}
                 {selectedEdge.flows.length > 3 && (
-                  <span className="tc-file">+{selectedEdge.flows.length - 3} more flows</span>
+                  <span className="font-mono text-[11px] text-muted-foreground">+{selectedEdge.flows.length - 3} more flows</span>
                 )}
               </>
             ) : (
               <>
                 {selectedEdge.raws.map((r) => (
-                  <code key={r}>{r}</code>
+                  <Badge key={r} variant="secondary" className="font-mono text-[10px]">{r}</Badge>
                 ))}
-                <span className="tc-file">in {routeById[selectedEdge.from]?.file}</span>
+                <span className="font-mono text-[11px] text-muted-foreground">in {routeById[selectedEdge.from]?.file}</span>
               </>
             )}
           </div>
-          <p className={`tc-note ${edgeGesture ? 'known' : ''}`}>
+          <p className={`text-xs ${edgeGesture ? 'text-cyan-400' : 'text-muted-foreground'}`}>
             {edgeGesture
               ? '◉ trigger position shown on the source screen'
               : 'trigger position not recorded — an interactive flow through this transition would pin it'}
           </p>
-        </footer>
+        </Card>
       )}
 
-      {commandSheet && (
-        <div className="sheet-scrim" onClick={() => setCommandSheet(null)}>
-          <div className="command-sheet" onClick={(e) => e.stopPropagation()}>
-            <h2>Replay · {commandSheet.flow.title ?? commandSheet.flow.name}</h2>
-            <pre>{commandSheet.cmd}</pre>
-            <div className="sheet-actions">
-              <button
-                className="copy-btn"
+      <Dialog open={!!commandSheet} onOpenChange={(open) => { if (!open) setCommandSheet(null) }}>
+        {commandSheet && (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Replay · {commandSheet.flow.title ?? commandSheet.flow.name}</DialogTitle>
+              <DialogDescription>Run this command from the app workspace.</DialogDescription>
+            </DialogHeader>
+            <pre className="overflow-x-auto rounded-lg border bg-muted/60 p-4 font-mono text-xs leading-relaxed selection:bg-primary/30">{commandSheet.cmd}</pre>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCommandSheet(null)}>Close</Button>
+              <Button
                 onClick={() =>
                   navigator.clipboard.writeText(commandSheet.cmd).then(
                     () => { showToast('Copied'); setCommandSheet(null) },
@@ -763,16 +787,15 @@ function Graph({ bundle, onOpenBuffer, onCloseDiff }) {
                   )
                 }
               >
-                Copy
-              </button>
-              <button className="ghost-btn" onClick={() => setCommandSheet(null)}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className={`toast ${toast ? 'show' : ''}`}>{toast}</div>
+                <Copy />Copy command
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
+      <Toaster theme="dark" position="top-center" toastOptions={{ className: 'border-border bg-popover text-popover-foreground' }} />
     </div>
+    </TooltipProvider>
   )
 }
 
@@ -885,40 +908,51 @@ export default function App() {
 
   return (
     <div
-      className={`landing ${dragging ? 'dragging' : ''}`}
+      className={`grid h-full place-items-center bg-background p-6 transition-colors ${dragging ? 'bg-primary/5' : ''}`}
       onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
     >
-      <div className="landing-card">
-        <span className="mark big" />
-        <h1>appmap visualiser</h1>
-        <p>Drop an <code>.appmap</code> bundle to explore your app as a living map — every screen, every link, every agent flow. Or drop an <code>.appmapdiff</code> to review what a PR changed.</p>
-        <label className="drop-zone">
-          <input
-            type="file"
-            accept=".appmap,.appmapdiff,.zip"
-            onChange={async (e) => {
-              const f = e.target.files?.[0]
-              if (f) open(await f.arrayBuffer())
-            }}
-          />
-          <span>{dragging ? 'drop it!' : 'drag a bundle here · or click to browse'}</span>
-        </label>
-        {demoAvailable && (
-          <button
-            className="demo-btn"
-            disabled={busy}
-            onClick={async () => {
-              const res = await fetch('/demo.appmap')
-              open(await res.arrayBuffer())
-            }}
-          >
-            {busy ? 'loading…' : 'load the demo bundle'}
-          </button>
-        )}
-        {error && <p className="error">{error}</p>}
-      </div>
+      <Card className="w-full max-w-lg gap-0 overflow-hidden border-border/80 bg-card/90 py-0 shadow-2xl backdrop-blur-xl">
+        <CardHeader className="items-center px-8 pb-5 pt-8 text-center">
+          <div className="mb-3 flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+            <MapIcon className="size-6" />
+          </div>
+          <CardTitle className="text-xl tracking-tight">Appmap visualiser</CardTitle>
+          <CardDescription className="max-w-md leading-relaxed">
+            Explore every screen, transition, and agent flow, or review the visual impact of a pull request.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 px-8 pb-8">
+          <label className={`group flex min-h-36 cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-6 text-center transition-colors ${dragging ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/60 hover:bg-primary/5 hover:text-foreground'}`}>
+            <input
+              className="hidden"
+              type="file"
+              accept=".appmap,.appmapdiff,.zip"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                if (f) open(await f.arrayBuffer())
+              }}
+            />
+            <Upload className="size-5 transition-transform group-hover:-translate-y-0.5" />
+            <span className="text-sm font-medium">{dragging ? 'Drop bundle to open' : 'Drop an .appmap or .appmapdiff here'}</span>
+            <span className="text-xs text-muted-foreground">or click to browse</span>
+          </label>
+          {demoAvailable && (
+            <Button
+              className="w-full"
+              disabled={busy}
+              onClick={async () => {
+                const res = await fetch('/demo.appmap')
+                open(await res.arrayBuffer())
+              }}
+            >
+              <Sparkles />{busy ? 'Loading…' : 'Load demo bundle'}
+            </Button>
+          )}
+          {error && <p className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}
+        </CardContent>
+      </Card>
     </div>
   )
 }

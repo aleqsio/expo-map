@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Handle, Position } from '@xyflow/react'
+import { ChevronDown } from 'lucide-react'
 import { visualDiff } from '../lib/visualDiff'
+import { Button } from './ui/button'
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from './ui/dropdown-menu'
 
 const BROKEN = {
   'error-boundary': { icon: '⛌', label: 'crashes on deep link' },
@@ -29,17 +32,6 @@ function StatusDot({ status }) {
 // dot (amber = changed, green = added, red = removed); the trigger shows the
 // active state's dot and lights up amber when any state changed.
 function StatePicker({ states, active, baseDiffStatus, onSelect }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-  useEffect(() => {
-    if (!open) return
-    const close = (e) => {
-      if (!ref.current?.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('pointerdown', close)
-    return () => document.removeEventListener('pointerdown', close)
-  }, [open])
-
   const options = [
     { name: '', label: 'base screen', diff: baseDiffStatus },
     ...states.map((s) => ({ name: s.name, label: s.name, diff: s.diff ?? null })),
@@ -50,34 +42,38 @@ function StatePicker({ states, active, baseDiffStatus, onSelect }) {
 
   return (
     <div
-      ref={ref}
-      className={`state-picker nodrag nopan ${anyDiff ? 'has-diff' : ''} ${open ? 'open' : ''}`}
+      className="nodrag nopan mt-1.5 flex justify-center"
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <button className="sp-trigger" onClick={() => setOpen((o) => !o)} title="switch displayed state">
-        <StatusDot status={current.diff} />
-        <span className="sp-label">{current.label}</span>
-        <span className="sp-chev">▾</span>
-      </button>
-      {open && (
-        <div className="sp-menu">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className={`h-6 max-w-[148px] rounded-full bg-card/90 px-2 text-[10px] text-cyan-200 ${anyDiff ? 'border-amber-400/50 text-amber-300' : 'border-cyan-300/30'}`}
+            title="switch displayed state"
+          >
+            <StatusDot status={current.diff} />
+            <span className="truncate">{current.label}</span>
+            <ChevronDown className="size-3 opacity-60" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="center" className="min-w-36">
           {options.map((o) => (
-            <button
+            <DropdownMenuCheckboxItem
               key={o.name}
-              className={`sp-item ${o.name === activeName ? 'on' : ''}`}
+              checked={o.name === activeName}
               onClick={() => {
                 onSelect?.(o.name)
-                setOpen(false)
               }}
             >
-              <span className="sp-check">{o.name === activeName ? '✓' : ''}</span>
-              <span className="sp-label">{o.label}</span>
+              <span className="flex-1 truncate text-xs">{o.label}</span>
               <StatusDot status={o.diff} />
-            </button>
+            </DropdownMenuCheckboxItem>
           ))}
-        </div>
-      )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }
