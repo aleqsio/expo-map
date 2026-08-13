@@ -1,17 +1,66 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted-surface);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
 :root {
-  --bg: #0a0c11;
-  --panel: rgba(17, 20, 28, 0.72);
+  --radius: 0.625rem;
+  --background: oklch(0.13 0.01 270);
+  --foreground: oklch(0.97 0.005 270);
+  --card: oklch(0.18 0.012 270);
+  --card-foreground: oklch(0.97 0.005 270);
+  --popover: oklch(0.19 0.012 270);
+  --popover-foreground: oklch(0.97 0.005 270);
+  --primary: oklch(0.67 0.18 266);
+  --primary-foreground: oklch(0.98 0.01 266);
+  --secondary: oklch(0.25 0.015 270);
+  --secondary-foreground: oklch(0.97 0.005 270);
+  --muted-surface: oklch(0.23 0.012 270);
+  --muted-foreground: oklch(0.7 0.02 270);
+  --accent: oklch(0.27 0.025 270);
+  --accent-foreground: oklch(0.98 0.005 270);
+  --destructive: oklch(0.65 0.2 25);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.67 0.18 266);
+  --bg: var(--background);
+  --panel: oklch(0.18 0.012 270 / 88%);
   --panel-border: rgba(255, 255, 255, 0.08);
-  --fg: #e8eaf0;
-  --muted: #8b93a7;
-  --accent: #818cf8;
-  --accent-bright: #a5b4fc;
+  --fg: var(--foreground);
+  --muted: var(--muted-foreground);
+  --map-accent: #818cf8;
+  --map-accent-bright: #a5b4fc;
   --warn: #f59e0b;
   --ease: cubic-bezier(0.2, 0, 0, 1);
   color-scheme: dark;
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; border-color: var(--border); }
 
 html, body, #root { height: 100%; margin: 0; }
 
@@ -21,7 +70,7 @@ body {
     radial-gradient(900px 600px at 100% 110%, rgba(34, 211, 238, 0.07), transparent 60%),
     var(--bg);
   color: var(--fg);
-  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif;
+  font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -93,9 +142,9 @@ button, .drop-zone, .label, .badge-row, .state-tag, .flow-group, .stats, .brand,
   transition-duration: 0.25s;
 }
 .drop-zone:hover, .landing.dragging .drop-zone {
-  border-color: var(--accent);
+  border-color: var(--map-accent);
   background-color: rgba(129, 140, 248, 0.07);
-  color: var(--accent-bright);
+  color: var(--map-accent-bright);
 }
 .drop-zone input { display: none; }
 
@@ -441,7 +490,7 @@ button, .drop-zone, .label, .badge-row, .state-tag, .flow-group, .stats, .brand,
   transition-property: stroke; transition-duration: 0.2s; }
 .edge-faded .react-flow__edge-path { stroke: rgba(255, 255, 255, 0.045); }
 .edge-on-path .react-flow__edge-path {
-  stroke: var(--accent-bright);
+  stroke: var(--map-accent-bright);
   stroke-width: 2.4;
   filter: drop-shadow(0 0 6px rgba(129, 140, 248, 0.55));
 }
@@ -666,7 +715,7 @@ button, .drop-zone, .label, .badge-row, .state-tag, .flow-group, .stats, .brand,
 }
 .ph-dot.done::after { background: rgba(129, 140, 248, 0.55); }
 .ph-dot.now::after {
-  background: var(--accent-bright);
+  background: var(--map-accent-bright);
   box-shadow: 0 0 10px rgba(129, 140, 248, 0.8);
 }
 .ph-step-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
@@ -709,7 +758,7 @@ button, .drop-zone, .label, .badge-row, .state-tag, .flow-group, .stats, .brand,
   font-weight: 600;
 }
 .tc-screen { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tc-arrow { color: var(--accent-bright); flex: none; }
+.tc-arrow { color: var(--map-accent-bright); flex: none; }
 .tc-triggers {
   display: flex;
   flex-wrap: wrap;
@@ -722,7 +771,7 @@ button, .drop-zone, .label, .badge-row, .state-tag, .flow-group, .stats, .brand,
   border-radius: 8px;
   background: rgba(129, 140, 248, 0.12);
   border: 1px solid rgba(129, 140, 248, 0.3);
-  color: var(--accent-bright);
+  color: var(--map-accent-bright);
   font-size: 11px;
 }
 .tc-file { color: var(--muted); font-size: 10.5px; font-family: ui-monospace, Menlo, monospace; }
@@ -736,6 +785,10 @@ button, .drop-zone, .label, .badge-row, .state-tag, .flow-group, .stats, .brand,
   --diff-m: #fbbf24;
   --diff-d: #f87171;
 }
+
+.chg-a { color: var(--diff-a); border-color: hsl(158 64% 52% / 0.35); background: hsl(158 64% 52% / 0.08); }
+.chg-m { color: var(--diff-m); border-color: hsl(43 96% 56% / 0.35); background: hsl(43 96% 56% / 0.08); }
+.chg-d { color: var(--diff-d); border-color: hsl(0 91% 71% / 0.35); background: hsl(0 91% 71% / 0.08); }
 
 .screen-node.diff-unchanged { opacity: 0.38; filter: saturate(0.55); }
 .screen-node.diff-unchanged:hover,
@@ -807,7 +860,7 @@ button, .drop-zone, .label, .badge-row, .state-tag, .flow-group, .stats, .brand,
   border-radius: 99px;
   background: rgba(129, 140, 248, 0.14);
   border: 1px solid rgba(129, 140, 248, 0.4);
-  color: var(--accent-bright);
+  color: var(--map-accent-bright);
   font-size: 10.5px;
   font-weight: 700;
   vertical-align: 2px;
@@ -883,7 +936,7 @@ button, .drop-zone, .label, .badge-row, .state-tag, .flow-group, .stats, .brand,
   background: rgba(17, 20, 28, 0.9);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(129, 140, 248, 0.4);
-  color: var(--accent-bright);
+  color: var(--map-accent-bright);
   font-size: 12.5px;
   font-weight: 600;
   opacity: 0;
