@@ -1,0 +1,28 @@
+# .github/workflows/appmap-pr.yml — review what a PR changes on-screen
+name: appmap · PR changes
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+concurrency:
+  group: appmap-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+permissions:
+  contents: write        # push bundles to the appmaps branch (set publish: false to drop this)
+  pull-requests: write   # sticky comment
+jobs:
+  changes:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: aleqsio/expo-map/action@main
+        with:
+          mode: pr
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}   # optional — omit for deterministic-only
+          # project: apps/mobile
+          # publish: "false"   # private repos that only want the artifact link

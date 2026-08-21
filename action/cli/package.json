@@ -1,0 +1,13 @@
+{
+  "name": "appmap-ci",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Deterministic core of the appmap GitHub Action: baseline refresh, PR diff, publish, comment.",
+  "bin": {
+    "appmap-ci": "./appmap-ci.mjs"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
+  }
+}

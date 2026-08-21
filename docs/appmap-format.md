@@ -116,6 +116,9 @@ The **`.meta.json` sidecar** maps YAML step indexes (0-based, sparse) to cartogr
            "capture": "Profile--menu.png" }  // screenshot taken after this step;
                                              // state variants attach to nodes this way
   },
+  "landmarks": ["Share", "Mute", "Block", "Report"],  // words visible on the arrival
+                                       // screen; CI replays OCR-check them to
+                                       // detect drift (optional, recommended)
   "result": "Bottom sheet with Share/Mute/Block/Report options"
 }
 ```

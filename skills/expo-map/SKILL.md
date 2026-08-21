@@ -38,6 +38,7 @@ steps:
 Rules:
 - **If the argent MCP is connected, record through it** (`flow-start-recording` / `flow-add-step`): every step executes live, only successful steps are recorded, and taps get durable **selectors** instead of coordinates. Write the sidecar yourself alongside. Without argent, write the YAML directly using normalized 0–1 coordinates (device points ÷ device point-size).
 - Sidecar `steps` is keyed by 0-based YAML step index. Every coordinate tap/swipe needs a `target` label (visible text or accessibility description). When a tap/swipe NAVIGATES to a different screen, set `"screen": "<route id it landed on>"` — this is how multi-screen flows stay traceable and observed edges get pinned. Screenshots are sidecar `capture` entries on the step they follow — never YAML steps.
+- Add top-level `"landmarks": ["Explore", "Trending"]` — 2–5 words that are visible on the arrival screen and identify it (a title, a section header, a fixed button label; not live content). Headless replays in CI OCR the end screen and check these words to detect flow drift — without landmarks a drifted flow can only be caught heuristically.
 - Simple deep-link visits from the sweep are flows too (generate them mechanically). Record dead ends you resolved with a `note`.
 - Never record credentials; argent supports `{{secret:NAME}}` placeholders if input is unavoidable.
 

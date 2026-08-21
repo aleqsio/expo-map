@@ -1,0 +1,36 @@
+# .github/workflows/appmap-baseline.yml — keep the map of main fresh, and
+# turn agent discoveries into committed flows
+name: appmap · baseline
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 5 * * 1-5"   # weekday mornings, in case main was quiet
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Rebuild the whole map instead of incrementally
+        type: boolean
+        default: false
+concurrency:
+  group: appmap-baseline
+  cancel-in-progress: false
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  baseline:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: aleqsio/expo-map/action@main
+        with:
+          mode: baseline
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          flows_pr: "true"

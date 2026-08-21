@@ -49,6 +49,15 @@ npm run dev
 
 Drop a `.appmap` bundle on the landing page. A demo bundle (a full Bluesky map: 70 screens, 126 flows) ships in `public/demo.appmap` — the hosted instance loads it via the "load the demo bundle" button.
 
+## Run it in CI (GitHub Action)
+
+`aleqsio/expo-map/action@main` reviews every PR's screens without re-mapping the app:
+committed flows in `.appmap/flows/` replay headlessly, the baseline map of `main` (cached on an
+`appmaps` branch) supplies the base side, the agent explores only screens with no flow (budgeted),
+and a sticky PR comment links the hosted visualiser preloaded with `?map=…&changes=…`. After merge,
+the baseline job opens a flows PR for what the agent recorded. Setup, what each run does, and how to
+run the same pipeline locally: [docs/ci.md](docs/ci.md); workflow templates in [`action/templates/`](action/templates/).
+
 ## Repo layout
 
 - `skills/expo-map/SKILL.md` — the agent orchestration (phases, safety rails, flow-recording contract)
@@ -56,6 +65,8 @@ Drop a `.appmap` bundle on the landing page. A demo bundle (a full Bluesky map: 
 - `apps/visualiser/` — the Map / Changes viewer (Vite + React + Tailwind v4 + shadcn/ui + React Flow + elkjs; pixelmatch + OpenCV.js for the visual diff)
 - `docs/appmap-format.md` — bundle format contract, versioned
 - `docs/appmapdiff-format.md` — the PR diff bundle (Changes) format
+- `docs/ci.md` — the GitHub Action: design, install, local runs
+- `action/` — the composite Action, its `appmap-ci` CLI (`action/cli`), and workflow / `.appmap` templates
 - `fixtures/demo-app/` — minimal expo-router app exercising the parser
 
 ## Known limits

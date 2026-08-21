@@ -1,0 +1,10 @@
+{
+  "$comment": ".appmap/config.json — mechanical knobs for the deterministic lane. All optional.",
+  "scheme": "myapp",
+  "device": "iPhone 16 Pro",
+  "appName": "myapp",
+  "waits": { "transition": 2500, "network": 6000, "boot": 15000 },
+  "suspects": { "depth": 2, "broadCap": 8 },
+  "agent": { "enabled": true, "maxScreens": 8 },
+  "params": { "name": "bsky.app", "Profile.name": "bsky.app" }
+}

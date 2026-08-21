@@ -1,0 +1,226 @@
+name: appmap
+description: >-
+  Map every screen of an Expo / React Native app and review what a pull request changes on-screen.
+  PR runs diff the head against a cached baseline map, capture only the affected screens on an iOS
+  simulator, and post a sticky comment linking a preloaded visualiser. Baseline runs refresh the map
+  of main incrementally and open a flows PR for screens the agent had to explore.
+author: aleqsio
+branding:
+  icon: map
+  color: blue
+
+inputs:
+  mode:
+    description: "pr | baseline"
+    required: true
+  project:
+    description: Path to the Expo project (repo-relative)
+    default: "."
+  anthropic_api_key:
+    description: Enables the agent lane (Claude Code) for screens with no committed flow. Leave empty for deterministic-only runs.
+    default: ""
+  agent_max_screens:
+    description: Cap on screens the agent may explore per run
+    default: "8"
+  appmaps_branch:
+    description: Orphan branch that stores baseline maps and per-PR change bundles
+    default: appmaps
+  publish:
+    description: "Publish bundles to the appmaps branch so the comment can deep-link the hosted visualiser (requires contents: write). Set false for private repos if you only want the artifact."
+    default: "true"
+  viewer_url:
+    description: Hosted visualiser origin used in comment links
+    default: https://appmap-visualiser.vercel.app
+  simulator:
+    description: Simulator device name to boot
+    default: iPhone 16 Pro
+  xcode_configuration:
+    description: Xcode configuration for the dev client build
+    default: Debug
+  build_cache_key_files:
+    description: Globs hashed into the dev-client build cache key (JS-only changes must NOT bust it)
+    default: "ios/**/*.pbxproj,ios/Podfile.lock,package.json,app.json,app.config.*"
+  flows_pr:
+    description: "(baseline) Open a PR against the default branch with flows the agent recorded"
+    default: "true"
+  github_token:
+    description: Token for comments, appmaps-branch pushes and flows PRs
+    default: ${{ github.token }}
+
+outputs:
+  bundle:
+    description: Path of the produced .appmap / .appmapdiff
+    value: ${{ steps.run.outputs.bundle }}
+  summary:
+    description: Path of the run summary JSON
+    value: ${{ steps.run.outputs.summary }}
+  viewer_link:
+    description: Preloaded visualiser link (when published)
+    value: ${{ steps.publish.outputs.viewer_link }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check runner
+      shell: bash
+      run: |
+        if [ "$(uname)" != "Darwin" ]; then echo "::error::appmap needs a macOS runner (iOS simulator)"; exit 1; fi
+        xcrun simctl list devices available | head -20
+
+    - name: Install appmap-ci
+      shell: bash
+      run: |
+        cd "${{ github.action_path }}/cli" && npm ci --silent || npm install --silent
+        echo "${{ github.action_path }}/cli" >> "$GITHUB_PATH"
+        ln -sfn "${{ github.action_path }}/cli/appmap-ci.mjs" "${{ github.action_path }}/cli/appmap-ci"
+        npm install -g @swmansion/argent@0.21.0 --silent   # headless flow replay
+
+    - name: Install project dependencies
+      shell: bash
+      working-directory: ${{ inputs.project }}
+      run: |
+        if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile
+        elif [ -f yarn.lock ]; then yarn install --frozen-lockfile
+        else npm ci; fi
+
+    - name: Compute dev-client cache key
+      id: key
+      shell: bash
+      working-directory: ${{ inputs.project }}
+      run: |
+        IFS=',' read -ra GLOBS <<< "${{ inputs.build_cache_key_files }}"
+        files=$(for g in "${GLOBS[@]}"; do compgen -G "$g" || true; done | sort -u)
+        hash=$( (echo "${{ inputs.xcode_configuration }}"; xcodebuild -version; for f in $files; do [ -f "$f" ] && shasum -a 256 "$f"; done) | shasum -a 256 | cut -c1-16)
+        echo "key=appmap-devclient-${{ runner.os }}-$hash" >> "$GITHUB_OUTPUT"
+
+    - name: Restore dev client
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.project }}/ios/build/Build/Products
+        key: ${{ steps.key.outputs.key }}
+
+    - name: Boot simulator
+      shell: bash
+      run: |
+        udid=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; ds=[x for v in d.values() for x in v]; m=[x for x in ds if x["name"]=="${{ inputs.simulator }}"] or [x for x in ds if "iPhone" in x["name"]]; print(m[0]["udid"])')
+        xcrun simctl boot "$udid" || true
+        xcrun simctl bootstatus "$udid" -b
+        echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
+
+    - name: Build dev client (cache miss)
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: ${{ inputs.project }}
+      run: |
+        npx expo run:ios --no-bundler --no-install --configuration ${{ inputs.xcode_configuration }} --device "${{ inputs.simulator }}" 2>&1 | tail -40
+
+    - name: Restore baseline map
+      id: baseline
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        set -e
+        mkdir -p .appmap-ci
+        # prefer the baseline published for the PR base SHA; fall back to latest
+        base_sha="${{ github.event.pull_request.base.sha }}"
+        branch="${{ inputs.appmaps_branch }}"
+        if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+          git fetch --depth 1 origin "$branch":refs/remotes/origin/"$branch"
+          pick=""
+          [ -n "$base_sha" ] && pick=$(git ls-tree --name-only -r origin/$branch | grep "^main/${base_sha:0:7}" | head -1 || true)
+          [ -z "$pick" ] && pick=$(git ls-tree --name-only -r origin/$branch | grep '^main/latest.appmap$' | head -1 || true)
+          if [ -n "$pick" ]; then git show "origin/$branch:$pick" > .appmap-ci/baseline.appmap; echo "found=true" >> "$GITHUB_OUTPUT"; echo "baseline: $pick"; fi
+        fi
+        [ -f .appmap-ci/baseline.appmap ] || echo "found=false" >> "$GITHUB_OUTPUT"
+
+    - name: Run appmap-ci
+      id: run
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        set -e
+        if [ -n "$ANTHROPIC_API_KEY" ] && ! command -v claude >/dev/null; then npm install -g @anthropic-ai/claude-code --silent; fi
+        proj="${{ inputs.project }}"
+        mkdir -p "$proj/.appmap" && [ -f "$proj/.appmap/config.json" ] || true
+        if [ "${{ inputs.mode }}" = "pr" ]; then
+          if [ "${{ steps.baseline.outputs.found }}" != "true" ]; then
+            echo "::warning::no baseline map found on ${{ inputs.appmaps_branch }} — run the baseline workflow on main first; building a one-off baseline of the base commit is not supported yet"
+            echo "bundle=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          git fetch --depth 1 origin "${{ github.event.pull_request.base.sha }}" || true
+          appmap-ci pr --project "$proj" --baseline .appmap-ci/baseline.appmap \
+            --base "${{ github.event.pull_request.base.sha }}" --head "${{ github.event.pull_request.head.sha }}" \
+            --pr "${{ github.event.pull_request.number }}" --title "${{ github.event.pull_request.title }}" --url "${{ github.event.pull_request.html_url }}" \
+            --base-ref "${{ github.event.pull_request.base.ref }}" --head-ref "${{ github.event.pull_request.head.ref }}" \
+            $( [ -z "$ANTHROPIC_API_KEY" ] && echo --no-agent ) > .appmap-ci/summary.json
+        else
+          appmap-ci baseline --project "$proj" $( [ "${{ steps.baseline.outputs.found }}" = "true" ] && echo "--previous .appmap-ci/baseline.appmap" ) \
+            $( [ -z "$ANTHROPIC_API_KEY" ] && echo --no-agent ) > .appmap-ci/summary.json
+        fi
+        bundle=$(python3 -c 'import json;print(json.load(open(".appmap-ci/summary.json"))["bundle"])')
+        echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
+        echo "summary=.appmap-ci/summary.json" >> "$GITHUB_OUTPUT"
+
+    - name: Upload artifact
+      if: steps.run.outputs.bundle != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: appmap-${{ inputs.mode }}-${{ github.run_id }}
+        path: |
+          ${{ steps.run.outputs.bundle }}
+          .appmap-ci/summary.json
+        retention-days: 90
+
+    - name: Publish to appmaps branch
+      id: publish
+      if: steps.run.outputs.bundle != '' && inputs.publish == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        set -e
+        bundle="${{ steps.run.outputs.bundle }}"
+        if [ "${{ inputs.mode }}" = "pr" ]; then
+          dest="pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}.appmapdiff"
+          out=$(appmap-ci publish --repo "${{ github.repository }}" --branch "${{ inputs.appmaps_branch }}" --files "$bundle=$dest" --message "pr #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}")
+          changes_url=$(echo "$out" | python3 -c "import json,sys;print(json.load(sys.stdin)['urls']['$dest'])")
+          # the baseline this diff was computed against, so the viewer gets the backdrop
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          map_url="https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse origin/${{ inputs.appmaps_branch }})/main/${base_sha:0:7}.appmap"
+          git ls-tree --name-only -r origin/${{ inputs.appmaps_branch }} | grep -q "^main/${base_sha:0:7}.appmap$" || map_url="https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse origin/${{ inputs.appmaps_branch }})/main/latest.appmap"
+          echo "changes_url=$changes_url" >> "$GITHUB_OUTPUT"; echo "map_url=$map_url" >> "$GITHUB_OUTPUT"
+          echo "viewer_link=${{ inputs.viewer_url }}/?map=$map_url&changes=$changes_url" >> "$GITHUB_OUTPUT"
+        else
+          sha="${{ github.sha }}"
+          appmap-ci publish --repo "${{ github.repository }}" --branch "${{ inputs.appmaps_branch }}" --files "$bundle=main/${sha:0:7}.appmap,$bundle=main/latest.appmap" --message "baseline @ $sha" >/dev/null
+          echo "viewer_link=${{ inputs.viewer_url }}/?map=https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse origin/${{ inputs.appmaps_branch }})/main/latest.appmap" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Comment on PR
+      if: inputs.mode == 'pr' && steps.run.outputs.bundle != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        artifact_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts"
+        appmap-ci comment --summary .appmap-ci/summary.json --post --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" \
+          --viewer "${{ inputs.viewer_url }}" --artifact-url "$artifact_url" \
+          $( [ -n "${{ steps.publish.outputs.map_url }}" ] && echo --map-url "${{ steps.publish.outputs.map_url }}" ) \
+          $( [ -n "${{ steps.publish.outputs.changes_url }}" ] && echo --changes-url "${{ steps.publish.outputs.changes_url }}" )
+
+    - name: Open flows PR
+      if: inputs.mode == 'baseline' && inputs.flows_pr == 'true' && steps.run.outputs.bundle != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        dir=$(python3 -c 'import json;print(json.load(open(".appmap-ci/summary.json")).get("recordedFlowsDir") or "")')
+        if [ -n "$dir" ]; then
+          appmap-ci flows-pr --repo "${{ github.repository }}" --flows "$dir" --base "${{ github.event.repository.default_branch }}" \
+            --title "appmap: record flows for new screens" \
+            --body "Flows recorded by the appmap agent during the baseline refresh for screens that had no committed flow. Review the taps, then merge — future runs replay them deterministically (no LLM)."
+        else echo "no new flows recorded"; fi
