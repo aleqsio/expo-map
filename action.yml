@@ -39,15 +39,15 @@ inputs:
   simulator:
     description: Simulator device name to boot (falls back to any available iPhone)
     default: iPhone 17 Pro
-  xcode_configuration:
-    description: Xcode configuration for the dev client build
-    default: Debug
-  xcode:
-    description: "Xcode to build with: latest (newest installed — recent RN needs a newer Swift than the runner default), system (leave untouched), or a version like 26.3"
-    default: latest
-  build_cache_key_files:
-    description: Globs hashed into the dev-client build cache key (JS-only changes must NOT bust it)
-    default: "ios/**/*.pbxproj,ios/Podfile.lock,package.json,app.json,app.config.*"
+  app_path:
+    description: Path to a prebuilt simulator dev client (.app). Bring your own build — from a previous job's artifact, your own pipeline, or `eas build:run`-style downloads. When set, EAS is not touched.
+    default: ""
+  expo_token:
+    description: EXPO_TOKEN for the built-in EAS lane — the dev client is fetched from EAS (newest finished build whose fingerprint matches the checkout) or built there when none matches. Required unless app_path is set.
+    default: ""
+  eas_profile:
+    description: eas.json build profile for the simulator dev client (needs developmentClient + ios.simulator)
+    default: development-simulator
   flows_pr:
     description: "(baseline) Open a PR against the default branch with flows the agent recorded"
     default: "true"
@@ -73,13 +73,9 @@ runs:
       shell: bash
       run: |
         if [ "$(uname)" != "Darwin" ]; then echo "::error::appmap needs a macOS runner (iOS simulator)"; exit 1; fi
-        # the runner's default Xcode often lags what current RN's Swift packages need
-        case "${{ inputs.xcode }}" in
-          system) ;;
-          latest) sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer" ;;
-          *) sudo xcode-select -s "/Applications/Xcode_${{ inputs.xcode }}.app/Contents/Developer" ;;
-        esac
-        xcodebuild -version
+        if [ -z "${{ inputs.app_path }}${{ inputs.expo_token }}" ]; then
+          echo "::error::provide expo_token (EAS builds the dev client) or app_path (bring your own build)"; exit 1
+        fi
         xcrun simctl list devices available | head -20
 
     - name: Install appmap-ci
@@ -98,23 +94,6 @@ runs:
         elif [ -f yarn.lock ]; then yarn install --frozen-lockfile
         else npm ci; fi
 
-    - name: Compute dev-client cache key
-      id: key
-      shell: bash
-      working-directory: ${{ inputs.project }}
-      run: |
-        IFS=',' read -ra GLOBS <<< "${{ inputs.build_cache_key_files }}"
-        files=$(for g in "${GLOBS[@]}"; do compgen -G "$g" || true; done | sort -u)
-        hash=$( (echo "${{ inputs.xcode_configuration }}"; xcodebuild -version; for f in $files; do [ -f "$f" ] && shasum -a 256 "$f"; done) | shasum -a 256 | cut -c1-16)
-        echo "key=appmap-devclient-${{ runner.os }}-$hash" >> "$GITHUB_OUTPUT"
-
-    - name: Restore dev client
-      id: cache
-      uses: actions/cache@v4
-      with:
-        path: ${{ inputs.project }}/ios/build/Build/Products
-        key: ${{ steps.key.outputs.key }}
-
     - name: Boot simulator
       shell: bash
       run: |
@@ -123,31 +102,23 @@ runs:
         xcrun simctl bootstatus "$udid" -b
         echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
 
-    - name: Build dev client (cache miss)
-      if: steps.cache.outputs.cache-hit != 'true'
+    - name: Dev client (EAS or provided)
+      id: app
       shell: bash
-      working-directory: ${{ inputs.project }}
+      env:
+        EXPO_TOKEN: ${{ inputs.expo_token }}
       run: |
-        # no --no-install: fresh CNG checkouts have no ios/ yet, and expo must run pod install after prebuild
-        set +e
-        # target the booted simulator by UDID — the requested name may not exist on this image's runtimes
-        npx expo run:ios --no-bundler --configuration ${{ inputs.xcode_configuration }} --device "$SIM_UDID" > /tmp/expo-build.log 2>&1
-        code=$?
-        if [ $code -ne 0 ]; then
-          echo "::group::build errors"; grep -n -m 20 -A 10 -E "error:|fatal|CommandError" /tmp/expo-build.log | head -250 || true; echo "::endgroup::"
+        set -e
+        if [ -n "${{ inputs.app_path }}" ]; then
+          app="$(cd "$(dirname "${{ inputs.app_path }}")" && pwd)/$(basename "${{ inputs.app_path }}")"
+          [ -d "$app" ] || { echo "::error::app_path not found: $app"; exit 1; }
+          echo "using provided dev client: $app"
         else
-          tail -30 /tmp/expo-build.log
+          command -v eas >/dev/null || npm install -g eas-cli --silent
+          appmap-ci resolve-app --project "${{ inputs.project }}" --profile "${{ inputs.eas_profile }}" | tee /tmp/appmap-app.json
+          app=$(python3 -c 'import json,sys;print(json.load(open("/tmp/appmap-app.json"))["appPath"])')
         fi
-        exit $code
-
-    - name: Upload build log (failure)
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: appmap-build-log-${{ github.run_id }}
-        path: /tmp/expo-build.log
-        retention-days: 7
-        if-no-files-found: ignore
+        echo "app=$app" >> "$GITHUB_OUTPUT"
 
     - name: Restore baseline map
       id: baseline
@@ -176,6 +147,7 @@ runs:
         AGENT_PROVIDER: ${{ inputs.agent_provider }}
         AGENT_MAX_SCREENS: ${{ inputs.agent_max_screens }}
         AGENT_API_KEY: ${{ inputs.agent_api_key }}
+        APPMAP_APP_PATH: ${{ steps.app.outputs.app }}
         GH_TOKEN: ${{ inputs.github_token }}
       run: |
         set -e

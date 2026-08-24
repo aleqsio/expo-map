@@ -25,5 +25,6 @@ jobs:
           mode: pr
           agent_api_key: ${{ secrets.ANTHROPIC_API_KEY }}   # optional — omit for deterministic-only
           # agent_provider: claude   # or codex | gemini | opencode — pass the matching key above
+          expo_token: ${{ secrets.EXPO_TOKEN }}   # EAS builds/serves the dev client (or pass app_path instead)
           # project: apps/mobile
           # publish: "false"   # private repos that only want the artifact link

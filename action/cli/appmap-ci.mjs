@@ -9,6 +9,7 @@
 //                      [--post --repo owner/name --pr <n>]
 //   appmap-ci publish  --repo owner/name [--branch appmaps] --files src=dest[,src=dest…] --message "…"
 //   appmap-ci flows-pr --repo owner/name --flows <dir> [--base main] --title "…" [--body "…"]
+//   appmap-ci resolve-app --project <dir> [--profile development-simulator]   (EAS: reuse-by-fingerprint or build)
 //
 // Runs locally too: the same commands the Action runs, against your own
 // simulator. See docs/ci.md.
@@ -307,6 +308,13 @@ async function flowsPr() {
   console.log(JSON.stringify({ url }))
 }
 
-const commands = { baseline, pr, comment, publish, 'flows-pr': flowsPr }
-if (!commands[cmd]) { console.error('usage: appmap-ci <baseline|pr|comment|publish|flows-pr> [options]'); process.exit(1) }
+async function resolveAppCmd() {
+  const { resolveApp } = await import('./lib/eas.mjs')
+  const project = path.resolve(opts.project ?? '.')
+  const res = resolveApp({ projectDir: project, profile: opts.profile ?? 'development-simulator', workDir: path.resolve(opts.work ?? path.join(project, '.expo-map', 'ci', 'eas')) })
+  console.log(JSON.stringify(res, null, 2))
+}
+
+const commands = { baseline, pr, comment, publish, 'flows-pr': flowsPr, 'resolve-app': resolveAppCmd }
+if (!commands[cmd]) { console.error('usage: appmap-ci <baseline|pr|comment|publish|flows-pr|resolve-app> [options]'); process.exit(1) }
 commands[cmd]().catch((e) => { console.error('[appmap-ci] failed:', e.message); process.exit(1) })

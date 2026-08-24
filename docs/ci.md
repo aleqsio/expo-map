@@ -29,21 +29,30 @@ PR opened ──▶ restore baseline (appmaps branch) ──▶ static parse + s
 
 1. Add the two workflows from [`action/templates/`](../action/templates/) to
    `.github/workflows/` (`appmap-pr.yml`, `appmap-baseline.yml`).
-2. Optionally add an API key secret and pass it as `agent_api_key` — without it the
+2. Wire up the dev client. **The Action owns no build pipeline.** Either:
+   - **EAS (default):** link the project (`npx eas init`), add an `eas.json` profile
+     like `"development-simulator": { "developmentClient": true, "distribution":
+     "internal", "ios": { "simulator": true } }`, and pass an `EXPO_TOKEN` secret as
+     `expo_token`. The Action reuses the newest finished EAS build whose
+     **fingerprint** matches the checkout — JS-only PRs never build — and otherwise
+     runs `eas build` on Expo's infrastructure and waits.
+   - **Bring your own:** pass `app_path` pointing at a simulator `.app` you built in
+     an earlier step (your own pipeline, a shared artifact, whatever) — EAS is not
+     touched.
+3. Optionally add an API key secret and pass it as `agent_api_key` — without it the
    Action runs deterministic-only (deep links + committed flows, no exploration, no
    notes). Claude Code is the default agent; see [AI providers](#ai-providers).
-3. Commit `.appmap/config.json` (scheme, device, waits — see the template) and, if
+4. Commit `.appmap/config.json` (scheme, device, waits — see the template) and, if
    you want the agent to behave, `.appmap/SKILL.md` (auth, real params, forbidden
    controls, timing). Both are optional.
-4. Run the baseline workflow once (`workflow_dispatch`) so PRs have something to
+5. Run the baseline workflow once (`workflow_dispatch`) so PRs have something to
    diff against. It publishes `main/<sha>.appmap` + `main/latest.appmap` to an
    orphan `appmaps` branch.
 
-Requirements: a macOS runner (`macos-26` — recent Expo SDKs need Xcode 26.4+, which
-older images don't ship; the Action selects the newest installed Xcode by default,
-override with the `xcode` input), an Expo project whose dev client builds
-with `expo run:ios` (a prebuilt `ios/` works), and deep-linkable routes. JS-only
-PRs hit the dev-client cache; native changes rebuild (~15–25 min).
+Requirements: a macOS runner (`macos-26` recommended — the app only *runs* there, so
+the runner needs simulators, not a blessed Xcode toolchain), `expo-dev-client` in the
+app, and deep-linkable routes. JS-only PRs reuse the EAS build; native changes wait
+on one EAS build (queue + build time).
 
 ## What a PR run does
 
@@ -115,11 +124,15 @@ with the model driving it, and only Claude Code has been dogfooded end to end.
 | `.appmap/config.json` | deterministic | scheme, device, waits, suspect depth, agent budget, sample params |
 | `.appmap/flows/` | both | committed argent flows; the flows PR adds to it |
 | `appmaps` branch | Action | `main/<sha>.appmap`, `main/latest.appmap`, `pr-<n>/<sha>.appmapdiff` — SHA-pinned raw URLs |
-| Actions cache | Action | `ios/build/Build/Products` keyed by native inputs + Xcode version |
+| `eas.json` | EAS lane | the simulator dev-client profile (`eas_profile`, default `development-simulator`) |
+| EAS build history | EAS lane | acts as the dev-client cache, keyed by `@expo/fingerprint` — no actions/cache |
 | workflow artifact | Action | bundle + `summary.json` (90 days) |
 
 ## Decisions baked in
 
+- The Action never builds the app on the runner. EAS (or your `app_path`) supplies the
+  dev client; an afternoon of CI archaeology (CocoaPods sync, Swift-tools minimums,
+  clang strictness per Xcode point release) is Expo's problem now, not this Action's.
 - Flows PRs target `main` from the baseline job after merge — feature branches stay
   untouched, and the flows PR is reviewable on its own.
 - Baseline refreshes on every push to `main` (incremental: only suspect screens and

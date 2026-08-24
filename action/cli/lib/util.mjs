@@ -51,6 +51,7 @@ export function loadConfig(projectDir) {
     agent: { ...defaults.agent, ...(user.agent ?? {}) },
   }
   if (process.env.AGENT_MAX_SCREENS) merged.agent.maxScreens = Number(process.env.AGENT_MAX_SCREENS) || merged.agent.maxScreens
+  if (process.env.APPMAP_APP_PATH) merged.appPath = process.env.APPMAP_APP_PATH // a prebuilt client (e.g. from EAS) beats ios/build discovery
   return merged
 }
 

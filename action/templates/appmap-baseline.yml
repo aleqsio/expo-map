@@ -34,4 +34,5 @@ jobs:
           mode: baseline
           agent_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # agent_provider: claude   # or codex | gemini | opencode — pass the matching key above
+          expo_token: ${{ secrets.EXPO_TOKEN }}   # EAS builds/serves the dev client (or pass app_path instead)
           flows_pr: "true"
