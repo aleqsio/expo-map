@@ -71,23 +71,27 @@ runs:
   steps:
     - name: Check runner
       shell: bash
+      env:
+        INPUT_XCODE: ${{ inputs.xcode }}
       run: |
         if [ "$(uname)" != "Darwin" ]; then echo "::error::appmap needs a macOS runner (iOS simulator)"; exit 1; fi
         # the runner's default Xcode often lags what current RN's Swift packages need
-        case "${{ inputs.xcode }}" in
+        case "$INPUT_XCODE" in
           system) ;;
           latest) sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer" ;;
-          *) sudo xcode-select -s "/Applications/Xcode_${{ inputs.xcode }}.app/Contents/Developer" ;;
+          *) sudo xcode-select -s "/Applications/Xcode_${INPUT_XCODE}.app/Contents/Developer" ;;
         esac
         xcodebuild -version
         xcrun simctl list devices available | head -20
 
     - name: Install appmap-ci
       shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
       run: |
-        cd "${{ github.action_path }}/action/cli" && npm ci --silent || npm install --silent
-        echo "${{ github.action_path }}/action/cli" >> "$GITHUB_PATH"
-        ln -sfn "${{ github.action_path }}/action/cli/appmap-ci.mjs" "${{ github.action_path }}/action/cli/appmap-ci"
+        cd "$ACTION_PATH/action/cli" && npm ci --silent || npm install --silent
+        echo "$ACTION_PATH/action/cli" >> "$GITHUB_PATH"
+        ln -sfn "$ACTION_PATH/action/cli/appmap-ci.mjs" "$ACTION_PATH/action/cli/appmap-ci"
         npm install -g @swmansion/argent@0.21.0 --silent   # headless flow replay
 
     - name: Install project dependencies
@@ -153,12 +157,14 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github_token }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        INPUT_APPMAPS_BRANCH: ${{ inputs.appmaps_branch }}
       run: |
         set -e
         mkdir -p .appmap-ci
         # prefer the baseline published for the PR base SHA; fall back to latest
-        base_sha="${{ github.event.pull_request.base.sha }}"
-        branch="${{ inputs.appmaps_branch }}"
+        base_sha="$PR_BASE_SHA"
+        branch="$INPUT_APPMAPS_BRANCH"
         if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
           git fetch --depth 1 origin "$branch":refs/remotes/origin/"$branch"
           pick=""
@@ -176,6 +182,17 @@ runs:
         AGENT_MAX_SCREENS: ${{ inputs.agent_max_screens }}
         AGENT_API_KEY: ${{ inputs.agent_api_key }}
         GH_TOKEN: ${{ inputs.github_token }}
+        PR_TITLE: ${{ github.event.pull_request.title }}
+        PR_HTML_URL: ${{ github.event.pull_request.html_url }}
+        PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_PROJECT: ${{ inputs.project }}
+        INPUT_APPMAPS_BRANCH: ${{ inputs.appmaps_branch }}
+        BASELINE_FOUND: ${{ steps.baseline.outputs.found }}
       run: |
         set -e
         # install the chosen agent CLI on demand; a custom agent.command must be preinstalled by the workflow
@@ -189,20 +206,20 @@ runs:
           esac
           if [ -n "$bin" ] && ! command -v "$bin" >/dev/null; then npm install -g "$pkg" --silent; fi
         fi
-        proj="${{ inputs.project }}"
+        proj="$INPUT_PROJECT"
         mkdir -p "$proj/.appmap" && [ -f "$proj/.appmap/config.json" ] || true
-        if [ "${{ inputs.mode }}" = "pr" ]; then
-          if [ "${{ steps.baseline.outputs.found }}" != "true" ]; then
-            echo "::warning::no baseline map found on ${{ inputs.appmaps_branch }} — run the baseline workflow on main first; building a one-off baseline of the base commit is not supported yet"
+        if [ "$INPUT_MODE" = "pr" ]; then
+          if [ "$BASELINE_FOUND" != "true" ]; then
+            echo "::warning::no baseline map found on $INPUT_APPMAPS_BRANCH — run the baseline workflow on main first; building a one-off baseline of the base commit is not supported yet"
             echo "bundle=" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          git fetch --depth 1 origin "${{ github.event.pull_request.base.sha }}" || true
+          git fetch --depth 1 origin "$PR_BASE_SHA" || true
           appmap-ci pr --project "$proj" --baseline .appmap-ci/baseline.appmap \
-            --base "${{ github.event.pull_request.base.sha }}" --head "${{ github.event.pull_request.head.sha }}" \
-            --pr "${{ github.event.pull_request.number }}" --title "${{ github.event.pull_request.title }}" --url "${{ github.event.pull_request.html_url }}" \
-            --base-ref "${{ github.event.pull_request.base.ref }}" --head-ref "${{ github.event.pull_request.head.ref }}" > .appmap-ci/summary.json
+            --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA" \
+            --pr "$PR_NUMBER" --title "$PR_TITLE" --url "$PR_HTML_URL" \
+            --base-ref "$PR_BASE_REF" --head-ref "$PR_HEAD_REF" > .appmap-ci/summary.json
         else
-          appmap-ci baseline --project "$proj" $( [ "${{ steps.baseline.outputs.found }}" = "true" ] && echo "--previous .appmap-ci/baseline.appmap" ) > .appmap-ci/summary.json
+          appmap-ci baseline --project "$proj" $( [ "$BASELINE_FOUND" = "true" ] && echo "--previous .appmap-ci/baseline.appmap" ) > .appmap-ci/summary.json
         fi
         bundle=$(python3 -c 'import json;print(json.load(open(".appmap-ci/summary.json"))["bundle"])')
         echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
@@ -224,23 +241,32 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github_token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        GITHUB_SHA_CTX: ${{ github.sha }}
+        GITHUB_REPO: ${{ github.repository }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_APPMAPS_BRANCH: ${{ inputs.appmaps_branch }}
+        INPUT_VIEWER_URL: ${{ inputs.viewer_url }}
+        RUN_BUNDLE: ${{ steps.run.outputs.bundle }}
       run: |
         set -e
-        bundle="${{ steps.run.outputs.bundle }}"
-        if [ "${{ inputs.mode }}" = "pr" ]; then
-          dest="pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}.appmapdiff"
-          out=$(appmap-ci publish --repo "${{ github.repository }}" --branch "${{ inputs.appmaps_branch }}" --files "$bundle=$dest" --message "pr #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}")
+        bundle="$RUN_BUNDLE"
+        if [ "$INPUT_MODE" = "pr" ]; then
+          dest="pr-${PR_NUMBER}/${PR_HEAD_SHA}.appmapdiff"
+          out=$(appmap-ci publish --repo "$GITHUB_REPO" --branch "$INPUT_APPMAPS_BRANCH" --files "$bundle=$dest" --message "pr #${PR_NUMBER} @ ${PR_HEAD_SHA}")
           changes_url=$(echo "$out" | python3 -c "import json,sys;print(json.load(sys.stdin)['urls']['$dest'])")
           # the baseline this diff was computed against, so the viewer gets the backdrop
-          base_sha="${{ github.event.pull_request.base.sha }}"
-          map_url="https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse origin/${{ inputs.appmaps_branch }})/main/${base_sha:0:7}.appmap"
-          git ls-tree --name-only -r origin/${{ inputs.appmaps_branch }} | grep -q "^main/${base_sha:0:7}.appmap$" || map_url="https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse origin/${{ inputs.appmaps_branch }})/main/latest.appmap"
+          base_sha="$PR_BASE_SHA"
+          map_url="https://raw.githubusercontent.com/$GITHUB_REPO/$(git rev-parse origin/$INPUT_APPMAPS_BRANCH)/main/${base_sha:0:7}.appmap"
+          git ls-tree --name-only -r "origin/$INPUT_APPMAPS_BRANCH" | grep -q "^main/${base_sha:0:7}.appmap$" || map_url="https://raw.githubusercontent.com/$GITHUB_REPO/$(git rev-parse origin/$INPUT_APPMAPS_BRANCH)/main/latest.appmap"
           echo "changes_url=$changes_url" >> "$GITHUB_OUTPUT"; echo "map_url=$map_url" >> "$GITHUB_OUTPUT"
-          echo "viewer_link=${{ inputs.viewer_url }}/?map=$map_url&changes=$changes_url" >> "$GITHUB_OUTPUT"
+          echo "viewer_link=${INPUT_VIEWER_URL}/?map=$map_url&changes=$changes_url" >> "$GITHUB_OUTPUT"
         else
-          sha="${{ github.sha }}"
-          appmap-ci publish --repo "${{ github.repository }}" --branch "${{ inputs.appmaps_branch }}" --files "$bundle=main/${sha:0:7}.appmap,$bundle=main/latest.appmap" --message "baseline @ $sha" >/dev/null
-          echo "viewer_link=${{ inputs.viewer_url }}/?map=https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse origin/${{ inputs.appmaps_branch }})/main/latest.appmap" >> "$GITHUB_OUTPUT"
+          sha="$GITHUB_SHA_CTX"
+          appmap-ci publish --repo "$GITHUB_REPO" --branch "$INPUT_APPMAPS_BRANCH" --files "$bundle=main/${sha:0:7}.appmap,$bundle=main/latest.appmap" --message "baseline @ $sha" >/dev/null
+          echo "viewer_link=${INPUT_VIEWER_URL}/?map=https://raw.githubusercontent.com/$GITHUB_REPO/$(git rev-parse origin/$INPUT_APPMAPS_BRANCH)/main/latest.appmap" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Comment on PR
@@ -248,22 +274,31 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github_token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        GITHUB_SERVER_URL_CTX: ${{ github.server_url }}
+        GITHUB_REPO: ${{ github.repository }}
+        GITHUB_RUN_ID_CTX: ${{ github.run_id }}
+        VIEWER_URL: ${{ inputs.viewer_url }}
+        PUBLISH_MAP_URL: ${{ steps.publish.outputs.map_url }}
+        PUBLISH_CHANGES_URL: ${{ steps.publish.outputs.changes_url }}
       run: |
-        artifact_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts"
-        appmap-ci comment --summary .appmap-ci/summary.json --post --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" \
-          --viewer "${{ inputs.viewer_url }}" --artifact-url "$artifact_url" \
-          $( [ -n "${{ steps.publish.outputs.map_url }}" ] && echo --map-url "${{ steps.publish.outputs.map_url }}" ) \
-          $( [ -n "${{ steps.publish.outputs.changes_url }}" ] && echo --changes-url "${{ steps.publish.outputs.changes_url }}" )
+        artifact_url="${GITHUB_SERVER_URL_CTX}/${GITHUB_REPO}/actions/runs/${GITHUB_RUN_ID_CTX}#artifacts"
+        appmap-ci comment --summary .appmap-ci/summary.json --post --repo "$GITHUB_REPO" --pr "$PR_NUMBER" \
+          --viewer "$VIEWER_URL" --artifact-url "$artifact_url" \
+          $( [ -n "$PUBLISH_MAP_URL" ] && echo --map-url "$PUBLISH_MAP_URL" ) \
+          $( [ -n "$PUBLISH_CHANGES_URL" ] && echo --changes-url "$PUBLISH_CHANGES_URL" )
 
     - name: Open flows PR
       if: inputs.mode == 'baseline' && inputs.flows_pr == 'true' && steps.run.outputs.bundle != ''
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github_token }}
+        REPO_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        GITHUB_REPO: ${{ github.repository }}
       run: |
         dir=$(python3 -c 'import json;print(json.load(open(".appmap-ci/summary.json")).get("recordedFlowsDir") or "")')
         if [ -n "$dir" ]; then
-          appmap-ci flows-pr --repo "${{ github.repository }}" --flows "$dir" --base "${{ github.event.repository.default_branch }}" \
+          appmap-ci flows-pr --repo "$GITHUB_REPO" --flows "$dir" --base "$REPO_DEFAULT_BRANCH" \
             --title "appmap: record flows for new screens" \
             --body "Flows recorded by the appmap agent during the baseline refresh for screens that had no committed flow. Review the taps, then merge — future runs replay them deterministically (no LLM)."
         else echo "no new flows recorded"; fi
