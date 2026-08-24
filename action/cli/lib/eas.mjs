@@ -69,7 +69,7 @@ export function resolveApp({ projectDir, profile, workDir }) {
   const fingerprint = fingerprintOf(projectDir)
   if (fingerprint) {
     const r = run(eas[0], [...eas.slice(1), 'build:list', '--platform', 'ios', '--status', 'finished',
-      '--buildProfile', profile, '--fingerprintHash', fingerprint, '--limit', '1', '--json', '--non-interactive'], cwdOpts)
+      '--build-profile', profile, '--fingerprint-hash', fingerprint, '--limit', '1', '--json', '--non-interactive'], cwdOpts)
     if (r.status === 0) {
       try {
         const hit = parseJson(r.stdout, 'build:list')[0]
