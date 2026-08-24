@@ -1,4 +1,6 @@
-name: appmap
+# Marketplace metadata: must live at the repo root; "appmap" alone would
+# collide with AppLand's AppMap listing, hence the repo-matching name.
+name: expo-map
 description: >-
   Map every screen of an Expo / React Native app and review what a pull request changes on-screen.
   PR runs diff the head against a cached baseline map, capture only the affected screens on an iOS
@@ -73,9 +75,9 @@ runs:
     - name: Install appmap-ci
       shell: bash
       run: |
-        cd "${{ github.action_path }}/cli" && npm ci --silent || npm install --silent
-        echo "${{ github.action_path }}/cli" >> "$GITHUB_PATH"
-        ln -sfn "${{ github.action_path }}/cli/appmap-ci.mjs" "${{ github.action_path }}/cli/appmap-ci"
+        cd "${{ github.action_path }}/action/cli" && npm ci --silent || npm install --silent
+        echo "${{ github.action_path }}/action/cli" >> "$GITHUB_PATH"
+        ln -sfn "${{ github.action_path }}/action/cli/appmap-ci.mjs" "${{ github.action_path }}/action/cli/appmap-ci"
         npm install -g @swmansion/argent@0.21.0 --silent   # headless flow replay
 
     - name: Install project dependencies

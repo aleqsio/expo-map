@@ -51,7 +51,7 @@ Drop a `.appmap` bundle on the landing page. A demo bundle (a full Bluesky map: 
 
 ## Run it in CI (GitHub Action)
 
-`aleqsio/expo-map/action@main` reviews every PR's screens without re-mapping the app:
+`aleqsio/expo-map@main` reviews every PR's screens without re-mapping the app:
 committed flows in `.appmap/flows/` replay headlessly, the baseline map of `main` (cached on an
 `appmaps` branch) supplies the base side, the agent — Claude Code by default, or Codex / Gemini /
 OpenCode / any custom CLI via `agent_provider` — explores only screens with no flow (budgeted),
@@ -67,7 +67,7 @@ run the same pipeline locally: [docs/ci.md](docs/ci.md); workflow templates in [
 - `docs/appmap-format.md` — bundle format contract, versioned
 - `docs/appmapdiff-format.md` — the PR diff bundle (Changes) format
 - `docs/ci.md` — the GitHub Action: design, install, local runs
-- `action/` — the composite Action, its `appmap-ci` CLI (`action/cli`), and workflow / `.appmap` templates
+- `action.yml` — the composite GitHub Action (metadata at the root so the repo is Marketplace-publishable); its `appmap-ci` CLI lives in `action/cli`, workflow / `.appmap` templates in `action/templates`
 - `fixtures/demo-app/` — minimal expo-router app exercising the parser
 
 ## Known limits
