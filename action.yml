@@ -37,8 +37,8 @@ inputs:
     description: Hosted visualiser origin used in comment links
     default: https://appmap-visualiser.vercel.app
   simulator:
-    description: Simulator device name to boot
-    default: iPhone 16 Pro
+    description: Simulator device name to boot (falls back to any available iPhone)
+    default: iPhone 17 Pro
   xcode_configuration:
     description: Xcode configuration for the dev client build
     default: Debug
@@ -130,7 +130,8 @@ runs:
       run: |
         # no --no-install: fresh CNG checkouts have no ios/ yet, and expo must run pod install after prebuild
         set +e
-        npx expo run:ios --no-bundler --configuration ${{ inputs.xcode_configuration }} --device "${{ inputs.simulator }}" > /tmp/expo-build.log 2>&1
+        # target the booted simulator by UDID — the requested name may not exist on this image's runtimes
+        npx expo run:ios --no-bundler --configuration ${{ inputs.xcode_configuration }} --device "$SIM_UDID" > /tmp/expo-build.log 2>&1
         code=$?
         if [ $code -ne 0 ]; then
           echo "::group::build errors"; grep -n -m 20 -A 10 -E "error:|fatal|CommandError" /tmp/expo-build.log | head -250 || true; echo "::endgroup::"

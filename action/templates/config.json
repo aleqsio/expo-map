@@ -1,7 +1,7 @@
 {
   "$comment": ".appmap/config.json — mechanical knobs for the deterministic lane. All optional.",
   "scheme": "myapp",
-  "device": "iPhone 16 Pro",
+  "device": "iPhone 17 Pro",
   "appName": "myapp",
   "waits": { "transition": 2500, "network": 6000, "boot": 15000 },
   "suspects": { "depth": 2, "broadCap": 8 },
