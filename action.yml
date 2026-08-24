@@ -118,7 +118,8 @@ runs:
       shell: bash
       working-directory: ${{ inputs.project }}
       run: |
-        npx expo run:ios --no-bundler --no-install --configuration ${{ inputs.xcode_configuration }} --device "${{ inputs.simulator }}" 2>&1 | tail -40
+        # no --no-install: fresh CNG checkouts have no ios/ yet, and expo must run pod install after prebuild
+        npx expo run:ios --no-bundler --configuration ${{ inputs.xcode_configuration }} --device "${{ inputs.simulator }}" 2>&1 | tail -40
 
     - name: Restore baseline map
       id: baseline
