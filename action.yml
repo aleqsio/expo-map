@@ -123,12 +123,20 @@ runs:
         npx expo run:ios --no-bundler --configuration ${{ inputs.xcode_configuration }} --device "${{ inputs.simulator }}" > /tmp/expo-build.log 2>&1
         code=$?
         if [ $code -ne 0 ]; then
-          echo "::group::build errors"; grep -n -m 60 -E "error:|error |fatal|CommandError|Cycle" /tmp/expo-build.log || true; echo "::endgroup::"
-          tail -200 /tmp/expo-build.log
+          echo "::group::build errors"; grep -n -m 20 -A 10 -E "error:|fatal|CommandError" /tmp/expo-build.log | head -250 || true; echo "::endgroup::"
         else
           tail -30 /tmp/expo-build.log
         fi
         exit $code
+
+    - name: Upload build log (failure)
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: appmap-build-log-${{ github.run_id }}
+        path: /tmp/expo-build.log
+        retention-days: 7
+        if-no-files-found: ignore
 
     - name: Restore baseline map
       id: baseline
