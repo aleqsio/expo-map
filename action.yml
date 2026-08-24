@@ -119,7 +119,16 @@ runs:
       working-directory: ${{ inputs.project }}
       run: |
         # no --no-install: fresh CNG checkouts have no ios/ yet, and expo must run pod install after prebuild
-        npx expo run:ios --no-bundler --configuration ${{ inputs.xcode_configuration }} --device "${{ inputs.simulator }}" 2>&1 | tail -40
+        set +e
+        npx expo run:ios --no-bundler --configuration ${{ inputs.xcode_configuration }} --device "${{ inputs.simulator }}" > /tmp/expo-build.log 2>&1
+        code=$?
+        if [ $code -ne 0 ]; then
+          echo "::group::build errors"; grep -n -m 60 -E "error:|error |fatal|CommandError|Cycle" /tmp/expo-build.log || true; echo "::endgroup::"
+          tail -200 /tmp/expo-build.log
+        else
+          tail -30 /tmp/expo-build.log
+        fi
+        exit $code
 
     - name: Restore baseline map
       id: baseline
