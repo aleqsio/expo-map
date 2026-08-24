@@ -29,10 +29,11 @@ function parseJson(text, what) {
   return JSON.parse(text.slice(start, Math.max(text.lastIndexOf(']'), text.lastIndexOf('}')) + 1))
 }
 
-export function fingerprintOf(projectDir) {
-  // run from tmp so a devEngines pin inside the project can't break npx
-  const r = run('npx', ['--yes', '@expo/fingerprint', path.resolve(projectDir)], { cwd: os.tmpdir() })
-  if (r.status !== 0) { log('fingerprint failed (will build fresh):', (r.stderr || '').slice(-300)); return null }
+export function fingerprintOf(projectDir, eas) {
+  // must be eas-cli's own computation — a bare @expo/fingerprint run hashes
+  // differently from what EAS records on builds, so reuse would never match
+  const r = run(eas[0], [...eas.slice(1), 'fingerprint:generate', '--platform', 'ios', '--non-interactive', '--json'], { cwd: projectDir, env: process.env })
+  if (r.status !== 0) { log('fingerprint failed (will build fresh):', (r.stderr || r.stdout || '').slice(-300)); return null }
   try { return parseJson(r.stdout, 'fingerprint').hash ?? null } catch { return null }
 }
 
@@ -66,7 +67,7 @@ export function resolveApp({ projectDir, profile, workDir }) {
   const cwdOpts = { cwd: projectDir, env: process.env }
   const dest = ensureDir(workDir)
 
-  const fingerprint = fingerprintOf(projectDir)
+  const fingerprint = fingerprintOf(projectDir, eas)
   if (fingerprint) {
     const r = run(eas[0], [...eas.slice(1), 'build:list', '--platform', 'ios', '--status', 'finished',
       '--build-profile', profile, '--fingerprint-hash', fingerprint, '--limit', '1', '--json', '--non-interactive'], cwdOpts)

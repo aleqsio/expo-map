@@ -4,7 +4,33 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { sh, shOk, sleep, log } from './util.mjs'
-import { argentAvailable, grantPermissions } from './argent.mjs'
+import { argentAvailable, argentRun, grantPermissions } from './argent.mjs'
+import { ocr, ocrAvailable } from './ocr.mjs'
+
+// iOS ≥18.3 gates simctl openurl for a custom scheme behind an
+// "Open in …?" prompt. Pre-approving the scheme in LaunchServices skips it
+// (the Detox/Maestro technique); harmless on versions without the prompt.
+function approveScheme(udid, scheme, bundleId) {
+  shOk('xcrun', ['simctl', 'spawn', udid, 'defaults', 'write', 'com.apple.launchservices.schemeapproval',
+    `com.apple.CoreSimulator.CoreSimulatorBridge-->${scheme}`, '-string', bundleId])
+}
+
+// Belt-and-braces for the same prompt: OCR the screen and tap "Open".
+function tapOpenPrompt(udid, projectDir) {
+  if (!ocrAvailable()) return false
+  const shot = path.join(projectDir, '.expo-map', 'ci', 'open-prompt.png')
+  fs.mkdirSync(path.dirname(shot), { recursive: true })
+  sh('xcrun', ['simctl', 'io', udid, 'screenshot', shot])
+  const items = ocr(shot)
+  if (!items.some((i) => /^open in/i.test(i.text.trim()))) return false
+  const b = items.find((i) => /^open$/i.test(i.text.trim()))
+  if (!b) return false
+  // Vision boxes: normalized, origin bottom-left → argent taps: origin top-left
+  const x = b.x + b.w / 2, y = 1 - (b.y + b.h / 2)
+  const r = argentRun('gesture-tap', { udid, x: x.toFixed(4), y: y.toFixed(4) })
+  log(`tapped "Open" on the scheme prompt (${r.ok ? 'ok' : 'tap failed'})`)
+  return r.ok
+}
 
 export function listBooted() {
   const j = JSON.parse(sh('xcrun', ['simctl', 'list', 'devices', 'booted', '-j']))
@@ -111,6 +137,7 @@ export async function openSession({ projectDir, config, scheme }) {
   const bundleId = config.bundleId ?? bundleIdOf(appPath)
   installApp(udid, appPath)
   grantPrivacy(udid, bundleId)
+  approveScheme(udid, scheme, bundleId)
   const metro = startMetro(projectDir, config.metroPort)
   await waitFor(metro.ready, 120000, 'Metro to start')
   terminate(udid, bundleId)
@@ -135,6 +162,7 @@ export async function openSession({ projectDir, config, scheme }) {
     if (r === true) { bundledOk = true; break }
     if (r === false) break
     log('waiting for the first JS bundle…')
+    try { tapOpenPrompt(udid, projectDir) } catch {}
   }
   if (!bundledOk) {
     log('metro tail:\n' + metro.output().split('\n').slice(-25).join('\n'))
