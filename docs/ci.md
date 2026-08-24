@@ -39,7 +39,9 @@ PR opened ──▶ restore baseline (appmaps branch) ──▶ static parse + s
    diff against. It publishes `main/<sha>.appmap` + `main/latest.appmap` to an
    orphan `appmaps` branch.
 
-Requirements: a macOS runner (`macos-15`), an Expo project whose dev client builds
+Requirements: a macOS runner (`macos-26` — recent Expo SDKs need Xcode 26.4+, which
+older images don't ship; the Action selects the newest installed Xcode by default,
+override with the `xcode` input), an Expo project whose dev client builds
 with `expo run:ios` (a prebuilt `ios/` works), and deep-linkable routes. JS-only
 PRs hit the dev-client cache; native changes rebuild (~15–25 min).
 

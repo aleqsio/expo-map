@@ -11,7 +11,7 @@ permissions:
   pull-requests: write   # sticky comment
 jobs:
   changes:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
