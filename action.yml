@@ -42,6 +42,9 @@ inputs:
   xcode_configuration:
     description: Xcode configuration for the dev client build
     default: Debug
+  xcode:
+    description: "Xcode to build with: latest (newest installed — recent RN needs a newer Swift than the runner default), system (leave untouched), or a version like 26.3"
+    default: latest
   build_cache_key_files:
     description: Globs hashed into the dev-client build cache key (JS-only changes must NOT bust it)
     default: "ios/**/*.pbxproj,ios/Podfile.lock,package.json,app.json,app.config.*"
@@ -70,6 +73,13 @@ runs:
       shell: bash
       run: |
         if [ "$(uname)" != "Darwin" ]; then echo "::error::appmap needs a macOS runner (iOS simulator)"; exit 1; fi
+        # the runner's default Xcode often lags what current RN's Swift packages need
+        case "${{ inputs.xcode }}" in
+          system) ;;
+          latest) sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer" ;;
+          *) sudo xcode-select -s "/Applications/Xcode_${{ inputs.xcode }}.app/Contents/Developer" ;;
+        esac
+        xcodebuild -version
         xcrun simctl list devices available | head -20
 
     - name: Install appmap-ci
