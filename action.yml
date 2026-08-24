@@ -181,6 +181,15 @@ runs:
         echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
         echo "summary=.appmap-ci/summary.json" >> "$GITHUB_OUTPUT"
 
+    - name: Upload diagnostics (failure)
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: appmap-diagnostics-${{ github.run_id }}
+        path: ${{ inputs.project }}/.expo-map/ci/diag
+        retention-days: 7
+        if-no-files-found: ignore
+
     - name: Upload artifact
       if: steps.run.outputs.bundle != ''
       uses: actions/upload-artifact@v4

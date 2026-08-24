@@ -123,8 +123,14 @@ export async function openSession({ projectDir, config, scheme }) {
   const connectUrl = `${scheme}://expo-development-client/?url=${encodeURIComponent(`http://localhost:${config.metroPort}`)}`
   const deadline = Date.now() + 300000
   let bundledOk = false
+  let nudges = 0
   while (Date.now() < deadline) {
+    // after a few foreground nudges, cold-start into the link instead: openurl
+    // on a terminated app launches it straight into the deep link, skipping
+    // any launcher race
+    if (nudges > 0 && nudges % 3 === 0) { try { terminate(udid, bundleId) } catch {}; await sleep(800) }
     openUrl(udid, connectUrl)
+    nudges++
     const r = await Promise.race([metro.bundled, sleep(15000).then(() => 'tick')])
     if (r === true) { bundledOk = true; break }
     if (r === false) break
@@ -132,6 +138,17 @@ export async function openSession({ projectDir, config, scheme }) {
   }
   if (!bundledOk) {
     log('metro tail:\n' + metro.output().split('\n').slice(-25).join('\n'))
+    try {
+      const diagDir = path.join(projectDir, '.expo-map', 'ci', 'diag')
+      fs.mkdirSync(diagDir, { recursive: true })
+      sh('xcrun', ['simctl', 'io', udid, 'screenshot', path.join(diagDir, 'connect-timeout.png')])
+      fs.writeFileSync(path.join(diagDir, 'metro.log'), metro.output())
+      fs.writeFileSync(path.join(diagDir, 'listapps.txt'), sh('xcrun', ['simctl', 'listapps', udid]))
+      let status = 'curl failed'
+      try { status = sh('curl', ['-s', '-m', '5', `http://localhost:${config.metroPort}/status`]) } catch {}
+      fs.writeFileSync(path.join(diagDir, 'metro-status.txt'), status)
+      log('connect diagnostics written to', diagDir)
+    } catch (e) { log('diagnostics failed:', e.message) }
     metro.stop()
     throw new Error('timed out waiting for first JS bundle')
   }
