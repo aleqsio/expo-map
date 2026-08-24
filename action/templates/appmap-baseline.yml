@@ -32,5 +32,6 @@ jobs:
       - uses: aleqsio/expo-map/action@main
         with:
           mode: baseline
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          agent_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # agent_provider: claude   # or codex | gemini | opencode — pass the matching key above
           flows_pr: "true"

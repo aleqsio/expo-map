@@ -23,6 +23,7 @@ jobs:
       - uses: aleqsio/expo-map/action@main
         with:
           mode: pr
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}   # optional — omit for deterministic-only
+          agent_api_key: ${{ secrets.ANTHROPIC_API_KEY }}   # optional — omit for deterministic-only
+          # agent_provider: claude   # or codex | gemini | opencode — pass the matching key above
           # project: apps/mobile
           # publish: "false"   # private repos that only want the artifact link

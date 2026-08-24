@@ -53,7 +53,8 @@ Drop a `.appmap` bundle on the landing page. A demo bundle (a full Bluesky map: 
 
 `aleqsio/expo-map/action@main` reviews every PR's screens without re-mapping the app:
 committed flows in `.appmap/flows/` replay headlessly, the baseline map of `main` (cached on an
-`appmaps` branch) supplies the base side, the agent explores only screens with no flow (budgeted),
+`appmaps` branch) supplies the base side, the agent — Claude Code by default, or Codex / Gemini /
+OpenCode / any custom CLI via `agent_provider` — explores only screens with no flow (budgeted),
 and a sticky PR comment links the hosted visualiser preloaded with `?map=…&changes=…`. After merge,
 the baseline job opens a flows PR for what the agent recorded. Setup, what each run does, and how to
 run the same pipeline locally: [docs/ci.md](docs/ci.md); workflow templates in [`action/templates/`](action/templates/).

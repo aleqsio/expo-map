@@ -16,8 +16,14 @@ inputs:
   project:
     description: Path to the Expo project (repo-relative)
     default: "."
+  agent_provider:
+    description: "Agent CLI for screens with no committed flow: claude (default) | codex | gemini | opencode. Or set agent.command in .appmap/config.json to run any CLI."
+    default: ""
+  agent_api_key:
+    description: API key for the chosen agent provider (mapped to the env var it expects). Leave empty for deterministic-only runs.
+    default: ""
   anthropic_api_key:
-    description: Enables the agent lane (Claude Code) for screens with no committed flow. Leave empty for deterministic-only runs.
+    description: "Deprecated alias of agent_api_key (provider: claude)."
     default: ""
   agent_max_screens:
     description: Cap on screens the agent may explore per run
@@ -139,11 +145,24 @@ runs:
       id: run
       shell: bash
       env:
+        AGENT_PROVIDER: ${{ inputs.agent_provider }}
+        AGENT_MAX_SCREENS: ${{ inputs.agent_max_screens }}
+        AGENT_API_KEY: ${{ inputs.agent_api_key != '' && inputs.agent_api_key || inputs.anthropic_api_key }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
         GH_TOKEN: ${{ inputs.github_token }}
       run: |
         set -e
-        if [ -n "$ANTHROPIC_API_KEY" ] && ! command -v claude >/dev/null; then npm install -g @anthropic-ai/claude-code --silent; fi
+        # install the chosen agent CLI on demand; a custom agent.command must be preinstalled by the workflow
+        if [ -n "$AGENT_API_KEY$AGENT_PROVIDER" ]; then
+          case "${AGENT_PROVIDER:-claude}" in
+            claude)   bin=claude;   pkg=@anthropic-ai/claude-code ;;
+            codex)    bin=codex;    pkg=@openai/codex ;;
+            gemini)   bin=gemini;   pkg=@google/gemini-cli ;;
+            opencode) bin=opencode; pkg=opencode-ai ;;
+            *)        bin=""; pkg="" ;;
+          esac
+          if [ -n "$bin" ] && ! command -v "$bin" >/dev/null; then npm install -g "$pkg" --silent; fi
+        fi
         proj="${{ inputs.project }}"
         mkdir -p "$proj/.appmap" && [ -f "$proj/.appmap/config.json" ] || true
         if [ "${{ inputs.mode }}" = "pr" ]; then
@@ -155,11 +174,9 @@ runs:
           appmap-ci pr --project "$proj" --baseline .appmap-ci/baseline.appmap \
             --base "${{ github.event.pull_request.base.sha }}" --head "${{ github.event.pull_request.head.sha }}" \
             --pr "${{ github.event.pull_request.number }}" --title "${{ github.event.pull_request.title }}" --url "${{ github.event.pull_request.html_url }}" \
-            --base-ref "${{ github.event.pull_request.base.ref }}" --head-ref "${{ github.event.pull_request.head.ref }}" \
-            $( [ -z "$ANTHROPIC_API_KEY" ] && echo --no-agent ) > .appmap-ci/summary.json
+            --base-ref "${{ github.event.pull_request.base.ref }}" --head-ref "${{ github.event.pull_request.head.ref }}" > .appmap-ci/summary.json
         else
-          appmap-ci baseline --project "$proj" $( [ "${{ steps.baseline.outputs.found }}" = "true" ] && echo "--previous .appmap-ci/baseline.appmap" ) \
-            $( [ -z "$ANTHROPIC_API_KEY" ] && echo --no-agent ) > .appmap-ci/summary.json
+          appmap-ci baseline --project "$proj" $( [ "${{ steps.baseline.outputs.found }}" = "true" ] && echo "--previous .appmap-ci/baseline.appmap" ) > .appmap-ci/summary.json
         fi
         bundle=$(python3 -c 'import json;print(json.load(open(".appmap-ci/summary.json"))["bundle"])')
         echo "bundle=$bundle" >> "$GITHUB_OUTPUT"

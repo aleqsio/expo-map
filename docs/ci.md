@@ -9,7 +9,8 @@ whole app. Three ideas carry it:
 2. **The baseline map is a cache.** The full `.appmap` of `main` is built once and
    refreshed incrementally on every push; a PR run captures only the *head side of its
    suspect screens* — base-side screenshots come from the baseline.
-3. **The agent fills gaps, then retires.** Claude Code runs only for screens with no
+3. **The agent fills gaps, then retires.** A headless coding agent (Claude Code by
+   default — see [AI providers](#ai-providers)) runs only for screens with no
    flow, guided by the repo's `.appmap/SKILL.md`, under a per-run budget. On PRs its
    output is ephemeral (captures in the bundle, flows in the artifact). After the
    feature merges, the baseline job records flows for the new screens and opens a
@@ -18,7 +19,7 @@ whole app. Three ideas carry it:
 ```
 PR opened ──▶ restore baseline (appmaps branch) ──▶ static parse + suspects ──▶ per suspect:
                                                                                committed flow? ──yes──▶ argent replay (teal)
-                                                                                               ──no───▶ Claude explores (violet, budgeted)
+                                                                                               ──no───▶ agent explores (violet, budgeted)
              base-side screenshots reused ──────────────────────────────────▶ head captures + notes ──▶ pack .appmapdiff
                                                                                                      ──▶ publish (appmaps branch + artifact)
                                                                                                      ──▶ sticky PR comment → ?map=…&changes=…
@@ -28,8 +29,9 @@ PR opened ──▶ restore baseline (appmaps branch) ──▶ static parse + s
 
 1. Add the two workflows from [`action/templates/`](../action/templates/) to
    `.github/workflows/` (`appmap-pr.yml`, `appmap-baseline.yml`).
-2. Optionally add `ANTHROPIC_API_KEY` as a repo secret — without it the Action runs
-   deterministic-only (deep links + committed flows, no exploration, no notes).
+2. Optionally add an API key secret and pass it as `agent_api_key` — without it the
+   Action runs deterministic-only (deep links + committed flows, no exploration, no
+   notes). Claude Code is the default agent; see [AI providers](#ai-providers).
 3. Commit `.appmap/config.json` (scheme, device, waits — see the template) and, if
    you want the agent to behave, `.appmap/SKILL.md` (auth, real params, forbidden
    controls, timing). Both are optional.
@@ -64,7 +66,7 @@ your own simulator:
 
 ```bash
 cd action/cli && npm install
-# full baseline of the current checkout (agent if ANTHROPIC_API_KEY is set)
+# full baseline of the current checkout (agent if its provider's key is set)
 node appmap-ci.mjs baseline --project ~/app --out /tmp/main.appmap
 # a PR diff: checkout the head, point at the baseline, name the base commit
 node appmap-ci.mjs pr --project ~/app --baseline /tmp/main.appmap --base <sha> --pr 42 --title "…" --out /tmp/pr42.appmapdiff
@@ -73,6 +75,35 @@ node appmap-ci.mjs comment --summary ~/app/.expo-map/ci/pr/summary.json --map-ur
 ```
 
 `--only id,id`, `--limit N`, `--no-agent`, `--no-sim` (static only) help while iterating.
+
+## AI providers
+
+The agent lane is provider-agnostic: its contract is file-based (the agent is told
+which screens to handle and exactly where to write captures, flows, `notes.json`
+and `summary.json`; the CLI validates the files afterwards), so any headless
+agentic CLI that can run shell commands fills the slot.
+
+| `agent_provider` | CLI invoked | key env var |
+| --- | --- | --- |
+| `claude` (default) | `claude -p … --dangerously-skip-permissions` | `ANTHROPIC_API_KEY` |
+| `codex` | `codex exec --dangerously-bypass-approvals-and-sandbox` | `OPENAI_API_KEY` |
+| `gemini` | `gemini --yolo -p …` | `GEMINI_API_KEY` |
+| `opencode` | `opencode run …` | bring your own (per its configured provider) |
+
+Pass the key as the `agent_api_key` input — the CLI maps it onto whichever env var
+the provider expects (an explicitly-set env var wins). The Action installs the
+chosen CLI on demand. Locally, `AGENT_PROVIDER` + the provider's own env var work
+the same way. For anything else, set in `.appmap/config.json`:
+
+```json
+"agent": { "command": "myagent --prompt-file {promptFile}", "keyEnv": "MYAGENT_API_KEY" }
+```
+
+`{promptFile}` (also `$APPMAP_PROMPT_FILE`) is a markdown file with the full task;
+the command runs via bash in the project directory and must be preinstalled by your
+workflow. `agent.provider` in the same file sets the preset without touching the
+workflow yaml. The prompt itself is identical across providers — quality varies
+with the model driving it, and only Claude Code has been dogfooded end to end.
 
 ## Files it reads and writes
 

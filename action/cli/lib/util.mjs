@@ -39,17 +39,19 @@ export function loadConfig(projectDir) {
     scheme: null, bundleId: null, appPath: null, device: 'iPhone 16 Pro', metroPort: 8081,
     waits: { transition: 2500, network: 6000, boot: 15000 },
     suspects: { depth: 2, broadCap: 8 },
-    agent: { enabled: true, maxScreens: 8, model: null },
+    agent: { enabled: true, maxScreens: 8, model: null, provider: null, command: null, keyEnv: null },
     flowsDir: '.appmap/flows', skillFile: '.appmap/SKILL.md',
     params: {},
   }
   const user = readJson(path.join(projectDir, '.appmap', 'config.json'), {})
-  return {
+  const merged = {
     ...defaults, ...user,
     waits: { ...defaults.waits, ...(user.waits ?? {}) },
     suspects: { ...defaults.suspects, ...(user.suspects ?? {}) },
     agent: { ...defaults.agent, ...(user.agent ?? {}) },
   }
+  if (process.env.AGENT_MAX_SCREENS) merged.agent.maxScreens = Number(process.env.AGENT_MAX_SCREENS) || merged.agent.maxScreens
+  return merged
 }
 
 // substitute :param placeholders in a urlPath with sample values
