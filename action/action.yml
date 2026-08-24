@@ -22,9 +22,6 @@ inputs:
   agent_api_key:
     description: API key for the chosen agent provider (mapped to the env var it expects). Leave empty for deterministic-only runs.
     default: ""
-  anthropic_api_key:
-    description: "Deprecated alias of agent_api_key (provider: claude)."
-    default: ""
   agent_max_screens:
     description: Cap on screens the agent may explore per run
     default: "8"
@@ -147,8 +144,7 @@ runs:
       env:
         AGENT_PROVIDER: ${{ inputs.agent_provider }}
         AGENT_MAX_SCREENS: ${{ inputs.agent_max_screens }}
-        AGENT_API_KEY: ${{ inputs.agent_api_key != '' && inputs.agent_api_key || inputs.anthropic_api_key }}
-        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        AGENT_API_KEY: ${{ inputs.agent_api_key }}
         GH_TOKEN: ${{ inputs.github_token }}
       run: |
         set -e
