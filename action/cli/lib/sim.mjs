@@ -13,6 +13,8 @@ import { ocr, ocrAvailable } from './ocr.mjs'
 function approveScheme(udid, scheme, bundleId) {
   shOk('xcrun', ['simctl', 'spawn', udid, 'defaults', 'write', 'com.apple.launchservices.schemeapproval',
     `com.apple.CoreSimulator.CoreSimulatorBridge-->${scheme}`, '-string', bundleId])
+  // SpringBoard caches approvals; respring so the write takes effect now
+  shOk('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'kickstart', '-k', 'system/com.apple.SpringBoard'])
 }
 
 // Belt-and-braces for the same prompt: OCR the screen and tap "Open".
@@ -138,6 +140,10 @@ export async function openSession({ projectDir, config, scheme }) {
   installApp(udid, appPath)
   grantPrivacy(udid, bundleId)
   approveScheme(udid, scheme, bundleId)
+  await sleep(3000) // let SpringBoard settle after the respring
+  // compile the OCR helper now — doing it lazily inside the connect loop
+  // starves a small runner while Metro bundles, and simctl openurl times out
+  ocrAvailable()
   const metro = startMetro(projectDir, config.metroPort)
   await waitFor(metro.ready, 120000, 'Metro to start')
   terminate(udid, bundleId)
@@ -156,7 +162,9 @@ export async function openSession({ projectDir, config, scheme }) {
     // on a terminated app launches it straight into the deep link, skipping
     // any launcher race
     if (nudges > 0 && nudges % 3 === 0) { try { terminate(udid, bundleId) } catch {}; await sleep(800) }
-    openUrl(udid, connectUrl)
+    // openurl can time out (POSIX 60) when the sim is under load — a missed
+    // nudge, not a fatal error
+    try { openUrl(udid, connectUrl) } catch (e) { log('openurl nudge failed:', e.message.split('\n')[0]) }
     nudges++
     const r = await Promise.race([metro.bundled, sleep(15000).then(() => 'tick')])
     if (r === true) { bundledOk = true; break }
@@ -187,7 +195,7 @@ export async function openSession({ projectDir, config, scheme }) {
   return {
     udid, bundleId, scheme, config, deviceName,
     async visit(url, outPath, waitMs) {
-      openUrl(udid, url)
+      try { openUrl(udid, url) } catch { await sleep(2000); openUrl(udid, url) } // one retry for transient simctl timeouts
       await sleep(waitMs ?? config.waits.transition)
       // dev builds often show a one-off toast right after the bundle loads;
       // give the very first capture extra time to settle
