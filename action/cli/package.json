@@ -8,6 +8,7 @@
     "appmap-ci": "./appmap-ci.mjs"
   },
   "dependencies": {
+    "puppeteer-core": "^25.9.0",
     "yaml": "^2.9.0"
   }
 }

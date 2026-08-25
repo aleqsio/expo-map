@@ -250,7 +250,7 @@ async function pr() {
   console.log(JSON.stringify(summary, null, 2))
 }
 
-function renderComment(s, { mapUrl, changesUrl, artifactUrl, viewer = 'https://appmap-visualiser.vercel.app' }) {
+function renderComment(s, { mapUrl, changesUrl, artifactUrl, shotUrl, viewer = 'https://appmap-visualiser.vercel.app' }) {
   const n = s.diff.nodes
   const A = n.filter((x) => x.status === 'A'), M = n.filter((x) => x.status === 'M'), D = n.filter((x) => x.status === 'D')
   const eA = s.diff.edges.filter((e) => e.status === 'A').length, eD = s.diff.edges.filter((e) => e.status === 'D').length
@@ -264,6 +264,8 @@ function renderComment(s, { mapUrl, changesUrl, artifactUrl, viewer = 'https://a
   if (!n.length) lines.push('_No screen is affected by this change as far as static analysis can tell._')
   const link = mapUrl || changesUrl ? `${viewer}/?${[mapUrl && `map=${encodeURIComponent(mapUrl)}`, changesUrl && `changes=${encodeURIComponent(changesUrl)}`].filter(Boolean).join('&')}` : null
   if (link) lines.push(`**[Open in visualiser →](${link})**`, '')
+  // the changed region, rendered by the visualiser in shot mode; clicks through
+  if (shotUrl) lines.push(link ? `[![changed screens](${shotUrl})](${link})` : `![changed screens](${shotUrl})`, '')
   const mark = { A: '➕', M: '✏️', D: '➖' }
   for (const d of [...A, ...M, ...D]) {
     const states = s.diff.states.filter((st) => st.node === d.id)
@@ -297,7 +299,7 @@ function renderComment(s, { mapUrl, changesUrl, artifactUrl, viewer = 'https://a
 
 async function comment() {
   const s = readJson(opts.summary)
-  const body = renderComment(s, { mapUrl: opts['map-url'], changesUrl: opts['changes-url'], artifactUrl: opts['artifact-url'], viewer: opts.viewer })
+  const body = renderComment(s, { mapUrl: opts['map-url'], changesUrl: opts['changes-url'], artifactUrl: opts['artifact-url'], shotUrl: opts['shot-url'], viewer: opts.viewer })
   if (opts.post) {
     const repo = opts.repo ?? repoSlug()
     const number = Number(opts.pr ?? s.pr)
@@ -319,6 +321,13 @@ async function flowsPr() {
   console.log(JSON.stringify({ url }))
 }
 
+async function shot() {
+  const { takeShot } = await import('./lib/shot.mjs')
+  const out = path.resolve(opts.out ?? 'appmap-shot.png')
+  await takeShot({ mapFile: path.resolve(opts.map), changesFile: opts.changes ? path.resolve(opts.changes) : null, out, viewer: opts.viewer || undefined })
+  console.log(JSON.stringify({ shot: out }))
+}
+
 async function resolveAppCmd() {
   const { resolveApp } = await import('./lib/eas.mjs')
   const project = path.resolve(opts.project ?? '.')
@@ -326,6 +335,6 @@ async function resolveAppCmd() {
   console.log(JSON.stringify(res, null, 2))
 }
 
-const commands = { baseline, pr, comment, publish, 'flows-pr': flowsPr, 'resolve-app': resolveAppCmd }
-if (!commands[cmd]) { console.error('usage: appmap-ci <baseline|pr|comment|publish|flows-pr|resolve-app> [options]'); process.exit(1) }
+const commands = { baseline, pr, comment, publish, 'flows-pr': flowsPr, 'resolve-app': resolveAppCmd, shot }
+if (!commands[cmd]) { console.error('usage: appmap-ci <baseline|pr|comment|publish|flows-pr|resolve-app|shot> [options]'); process.exit(1) }
 commands[cmd]().catch((e) => { console.error('[appmap-ci] failed:', e.message); process.exit(1) })

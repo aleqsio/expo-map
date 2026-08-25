@@ -181,6 +181,14 @@ runs:
         echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
         echo "summary=.appmap-ci/summary.json" >> "$GITHUB_OUTPUT"
 
+    - name: Render comment image
+      if: inputs.mode == 'pr' && steps.run.outputs.bundle != ''
+      shell: bash
+      run: |
+        appmap-ci shot --map .appmap-ci/baseline.appmap --changes "${{ steps.run.outputs.bundle }}" \
+          --out .appmap-ci/shot.png --viewer "${{ inputs.viewer_url }}" \
+          || echo "::warning::comment image failed — continuing without it"
+
     - name: Upload diagnostics (failure)
       if: failure()
       uses: actions/upload-artifact@v4
@@ -211,8 +219,13 @@ runs:
         bundle="${{ steps.run.outputs.bundle }}"
         if [ "${{ inputs.mode }}" = "pr" ]; then
           dest="pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}.appmapdiff"
-          out=$(appmap-ci publish --repo "${{ github.repository }}" --branch "${{ inputs.appmaps_branch }}" --files "$bundle=$dest" --message "pr #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}")
+          files="$bundle=$dest"
+          shot_dest="pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}.png"
+          [ -f .appmap-ci/shot.png ] && files="$files,.appmap-ci/shot.png=$shot_dest"
+          out=$(appmap-ci publish --repo "${{ github.repository }}" --branch "${{ inputs.appmaps_branch }}" --files "$files" --message "pr #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}")
           changes_url=$(echo "$out" | python3 -c "import json,sys;print(json.load(sys.stdin)['urls']['$dest'])")
+          shot_url=$(echo "$out" | python3 -c "import json,sys;print(json.load(sys.stdin)['urls'].get('$shot_dest',''))")
+          echo "shot_url=$shot_url" >> "$GITHUB_OUTPUT"
           # the baseline this diff was computed against, so the viewer gets the backdrop
           base_sha="${{ github.event.pull_request.base.sha }}"
           map_url="https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse origin/${{ inputs.appmaps_branch }})/main/${base_sha:0:7}.appmap"
@@ -235,7 +248,8 @@ runs:
         appmap-ci comment --summary .appmap-ci/summary.json --post --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" \
           --viewer "${{ inputs.viewer_url }}" --artifact-url "$artifact_url" \
           $( [ -n "${{ steps.publish.outputs.map_url }}" ] && echo --map-url "${{ steps.publish.outputs.map_url }}" ) \
-          $( [ -n "${{ steps.publish.outputs.changes_url }}" ] && echo --changes-url "${{ steps.publish.outputs.changes_url }}" )
+          $( [ -n "${{ steps.publish.outputs.changes_url }}" ] && echo --changes-url "${{ steps.publish.outputs.changes_url }}" ) \
+          $( [ -n "${{ steps.publish.outputs.shot_url }}" ] && echo --shot-url "${{ steps.publish.outputs.shot_url }}" )
 
     - name: Open flows PR
       if: inputs.mode == 'baseline' && inputs.flows_pr == 'true' && steps.run.outputs.bundle != ''

@@ -11,6 +11,12 @@ import { flowForNode, replayCommand } from '../lib/replay'
 
 const nodeTypes = { screen: ScreenNode }
 
+// ?shot — headless-screenshot mode: no chrome, no comparator flip (head side
+// frozen), viewport fitted to the changed nodes; window.__appmapShotReady
+// flips when the frame is worth capturing. Used by appmap-ci to render the
+// PR-comment image.
+const SHOT = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('shot')
+
 function hueFor(group) {
   let h = 0
   for (const c of group) h = (h * 31 + c.charCodeAt(0)) % 360
@@ -37,7 +43,7 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
   const [neighboursMode, setNeighboursMode] = useState(false)
   const [panelOpen, setPanelOpen] = useState(() => window.innerWidth > 900)
   const [commandSheet, setCommandSheet] = useState(null)
-  const { fitView, setCenter, getZoom } = useReactFlow()
+  const { fitView, setCenter, getZoom, flowToScreenPosition } = useReactFlow()
 
   // nodeId → chosen state name. In Changes mode, screens whose bare capture is
   // unaffected but carry a changed state open ON that state.
@@ -56,7 +62,7 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
   // shared clock for the in-place base⇄head comparator on changed screens
   const [flip, setFlip] = useState(false)
   useEffect(() => {
-    if (!diffMode) return
+    if (!diffMode || SHOT) return
     const t = setInterval(() => setFlip((f) => !f), 1000)
     return () => clearInterval(t)
   }, [diffMode])
@@ -199,6 +205,30 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
     },
     [map]
   )
+
+  // shot mode: once nodes are laid out, frame just the changed screens and
+  // signal readiness after images/paint settle
+  useEffect(() => {
+    if (!SHOT || !positions) return
+    const ids = diffMode
+      ? map.nodes.filter((n) => ['A', 'M', 'D'].includes(n.diff?.status)).map((n) => ({ id: n.id }))
+      : []
+    const t = setTimeout(() => {
+      fitView({ nodes: ids.length ? ids : undefined, padding: ids.length === 1 ? 0.45 : 0.18, duration: 0, maxZoom: 1.4 })
+      setTimeout(() => {
+        // screen-space bounds of the framed nodes so the screenshotter can crop
+        const subject = (ids.length ? ids : map.nodes.map((n) => ({ id: n.id }))).map(({ id }) => positions[id]).filter(Boolean)
+        if (subject.length) {
+          const tl = flowToScreenPosition({ x: Math.min(...subject.map((p) => p.x)), y: Math.min(...subject.map((p) => p.y)) })
+          const br = flowToScreenPosition({ x: Math.max(...subject.map((p) => p.x)) + NODE_W, y: Math.max(...subject.map((p) => p.y)) + NODE_H })
+          window.__appmapShotBounds = { x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y }
+        }
+        window.__appmapShotReady = true
+        document.title = 'appmap-shot-ready'
+      }, 1200)
+    }, 400)
+    return () => clearTimeout(t)
+  }, [positions, diffMode, map, fitView, flowToScreenPosition])
 
   const rfNodes = useMemo(() => {
     if (!positions) return []
@@ -417,18 +447,18 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
         edgesFocusable={false}
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="var(--canvas-dot)" />
-        <Controls showInteractive={false} />
-        <MiniMap
+        {!SHOT && <Controls showInteractive={false} />}
+        {!SHOT && <MiniMap
           pannable
           zoomable
           onClick={(_, pos) => setCenter(pos.x, pos.y, { duration: 400, zoom: Math.max(getZoom(), 0.55) })}
           nodeColor={(n) => (n.data?.diff ? `var(--${n.data.diff.status === 'A' ? 'added' : n.data.diff.status === 'D' ? 'removed' : 'changed'})` : `hsl(${n.data?.hue ?? 220} 55% 50%)`)}
           maskColor="color-mix(in oklch, var(--background) 82%, transparent)"
           bgColor="color-mix(in oklch, var(--card) 92%, transparent)"
-        />
+        />}
       </ReactFlow>
 
-      <TopBar
+      {!SHOT && <TopBar
         manifest={manifest}
         mode={mode}
         setMode={setMode}
@@ -438,16 +468,16 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
         diffStats={diffStats}
         onOpenBuffer={onOpenBuffer}
         onCloseChanges={onCloseChanges}
-      />
+      />}
 
-      <SidePanel
+      {!SHOT && <SidePanel
         title={diffMode ? 'Changes' : 'Agent flows'}
         count={panelItems.length}
         open={panelOpen}
         onToggle={() => setPanelOpen((o) => !o)}
         items={panelItems}
         footer={panelFooter}
-      />
+      />}
 
       {flow && stepView && (
         <Playhead
