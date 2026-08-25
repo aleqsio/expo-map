@@ -17,6 +17,16 @@ function approveScheme(udid, scheme, bundleId) {
   shOk('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'kickstart', '-k', 'system/com.apple.SpringBoard'])
 }
 
+// expo-dev-menu overlays first captures: a one-time onboarding sheet ("This is
+// the developer menu…") plus an optional show-at-launch. Both read the app's
+// standard UserDefaults (see DevMenuPreferences.swift), so mark onboarding done
+// before the first launch — the runtime equivalent of the
+// EXDevMenuIsOnboardingFinished Info.plist flag, without rebuilding the client.
+function muteDevMenu(udid, bundleId) {
+  shOk('xcrun', ['simctl', 'spawn', udid, 'defaults', 'write', bundleId, 'EXDevMenuIsOnboardingFinished', '-bool', 'true'])
+  shOk('xcrun', ['simctl', 'spawn', udid, 'defaults', 'write', bundleId, 'EXDevMenuShowsAtLaunch', '-bool', 'false'])
+}
+
 // Belt-and-braces for the same prompt: OCR the screen and tap "Open".
 function tapOpenPrompt(udid, projectDir) {
   if (!ocrAvailable()) return false
@@ -139,6 +149,7 @@ export async function openSession({ projectDir, config, scheme }) {
   const bundleId = config.bundleId ?? bundleIdOf(appPath)
   installApp(udid, appPath)
   grantPrivacy(udid, bundleId)
+  muteDevMenu(udid, bundleId)
   approveScheme(udid, scheme, bundleId)
   await sleep(3000) // let SpringBoard settle after the respring
   // compile the OCR helper now — doing it lazily inside the connect loop
