@@ -16,6 +16,15 @@ export function argentCommand() {
 }
 export const argentAvailable = () => !!argentCommand()
 
+let ver
+export function argentVersion() {
+  if (ver !== undefined) return ver
+  const cmd = argentCommand()
+  if (!cmd) return (ver = null)
+  const r = spawnSync(cmd[0], [...cmd[1], '--help'], { encoding: 'utf8', cwd: os.tmpdir() })
+  return (ver = ((r.stdout || '') + (r.stderr || '')).match(/argent v?(\d+\.\d+\.\d+)/)?.[1] ?? null)
+}
+
 // run a tool: argent run <tool> --flag value … ; returns { ok, json|null, raw }
 export function argentRun(tool, flags = {}) {
   const cmd = argentCommand()

@@ -19,8 +19,8 @@ import { parseArgs, loadConfig, readJson, writeJson, ensureDir, exists, log, sh,
 import { openSession } from './lib/sim.mjs'
 import { readBaseline, parseRoutes, computeSuspects, packBaseline, packDiff, downscaleAll } from './lib/bundle.mjs'
 import { loadFlows, replayFlow, verifyLanding } from './lib/replay.mjs'
-import { argentAvailable } from './lib/argent.mjs'
-import { runAgent } from './lib/agent.mjs'
+import { argentAvailable, argentVersion } from './lib/argent.mjs'
+import { runAgent, agentInfo } from './lib/agent.mjs'
 import { upsertStickyComment, publishToBranch, openFlowsPR, repoSlug } from './lib/github.mjs'
 
 const { opts, positional } = parseArgs(process.argv.slice(2))
@@ -110,6 +110,8 @@ async function captureRoutes({ project, config, scheme, session, routes, flows, 
       result.recordedFlowsDir = exists(path.join(agentDir, 'flows')) && fs.readdirSync(path.join(agentDir, 'flows')).length ? path.join(agentDir, 'flows') : null
       result.notes = readJson(path.join(agentDir, 'notes.json'), null)
     }
+  } else {
+    result.agentRun = { ran: false, reason: agentEnabled ? 'no screens without a flow' : 'disabled (--no-agent)', ...agentInfo(config) }
   }
   return result
 }
@@ -174,6 +176,7 @@ async function baseline() {
   packBaseline({ graph, screensDir, flowsDir: flowsDirForPack, captureStatus, appName, device: deviceName, commit, ref, out })
   const summary = {
     kind: 'baseline', app: appName, commit, ref, bundle: out, total: graph.routes.length, reused,
+    device: deviceName, argent: argentVersion(),
     captured: { replay: cap.replay.length, deeplink: cap.deeplink.length, agent: cap.agent.length, failed: cap.failed },
     unflowed: cap.unflowed.map((r) => r.id), drifted: cap.drifted ?? [], agent: cap.agentRun ?? { ran: false }, recordedFlowsDir: cap.recordedFlowsDir ?? null,
   }
@@ -236,7 +239,7 @@ async function pr() {
   const diff = readJson(path.join(diffDir, 'diff.json'))
   const summary = {
     kind: 'pr', app: appName, pr: opts.pr ? Number(opts.pr) : null, title: opts.title ?? null, baseSha, headSha, bundle: out,
-    baselineGeneratedAt: base.manifest.generatedAt,
+    baselineGeneratedAt: base.manifest.generatedAt, device: deviceName, argent: argentVersion(),
     suspects: { added: suspects.capture.filter((c) => c.status === 'A').length, modified: suspects.capture.filter((c) => c.status === 'M').length, removed: suspects.capture.filter((c) => c.status === 'D').length, broadFiles: suspects.broadFiles },
     captured: { replay: cap.replay.length, deeplink: cap.deeplink.length, agent: cap.agent.length, failed: cap.failed },
     agent: cap.agentRun ?? { ran: false }, recordedFlowsDir: cap.recordedFlowsDir ?? null, drifted: cap.drifted ?? [],
@@ -275,7 +278,15 @@ function renderComment(s, { mapUrl, changesUrl, artifactUrl, viewer = 'https://a
   const foot = []
   if (artifactUrl) foot.push(`[artifact](${artifactUrl})`)
   if (s.baselineGeneratedAt) foot.push(`baseline \`${(s.baseSha ?? '').slice(0, 7)}\` (${new Date(s.baselineGeneratedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC)`)
-  foot.push(`captured: ${s.captured.replay} by flow replay, ${s.captured.deeplink} by deep link, ${s.captured.agent} by agent`)
+  // who did the capturing: device, replay runner, and the agent's LLM setup
+  const a = s.agent ?? {}
+  let agentDesc = 'off'
+  if (a.provider) {
+    agentDesc = a.provider
+    if (a.keyEnv) agentDesc += a.hasKey ? ` · ${a.keyEnv}` : ` · ${a.keyEnv} not set`
+    else if (a.keyEnv === null && a.hasKey === null) agentDesc += ' · no LLM key configured'
+  }
+  foot.push(`captured on ${s.device ?? 'simulator'}: ${s.captured.replay} by flow replay${s.argent ? ` (argent ${s.argent})` : ''}, ${s.captured.deeplink} by deep link (simctl), ${s.captured.agent} by agent (${agentDesc})`)
   if (s.agent?.ran && s.agent.overBudget?.length) foot.push(`${s.agent.overBudget.length} screen(s) over the agent budget`)
   if (s.recordedFlowsDir) foot.push('new flows recorded — a flows PR will follow after merge')
   if (s.drifted?.length) foot.push(`${s.drifted.length} committed flow(s) drifted (${s.drifted.map((d) => d.flows[0]).join(', ')}) — captured by deep link instead; will be re-recorded`)

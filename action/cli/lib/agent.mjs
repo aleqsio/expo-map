@@ -78,14 +78,23 @@ function providerEnv(p) {
   return env
 }
 
+// provider + key presence for reporting (comment footer), without running
+export function agentInfo(config) {
+  const p = resolveProvider(config)
+  if (p.error) return { provider: p.name ?? null, keyEnv: null, hasKey: false }
+  const env = providerEnv(p)
+  return { provider: p.custom ? 'custom command' : p.name, keyEnv: p.keyEnv ?? null, hasKey: p.keyEnv ? !!env[p.keyEnv] : null }
+}
+
 export function runAgent({ projectDir, config, screens, scheme, udid, bundleId, outScreensDir, outFlowsDir, notesPath, summaryPath, mode, prContext }) {
-  if (!screens.length) return { ran: false, reason: 'nothing to explore' }
-  if (!config.agent.enabled) return { ran: false, reason: 'agent disabled in .appmap/config.json' }
+  const info = agentInfo(config)
+  if (!screens.length) return { ran: false, reason: 'nothing to explore', ...info }
+  if (!config.agent.enabled) return { ran: false, reason: 'agent disabled in .appmap/config.json', ...info }
   const provider = resolveProvider(config)
-  if (provider.error) return { ran: false, reason: provider.error }
+  if (provider.error) return { ran: false, reason: provider.error, ...info }
   const env = providerEnv(provider)
-  if (provider.keyEnv && !env[provider.keyEnv]) return { ran: false, reason: `${provider.keyEnv} (or AGENT_API_KEY) not set` }
-  if (!providerAvailable(provider)) return { ran: false, reason: `${provider.bin} CLI not installed` }
+  if (provider.keyEnv && !env[provider.keyEnv]) return { ran: false, reason: `${provider.keyEnv} (or AGENT_API_KEY) not set`, ...info }
+  if (!providerAvailable(provider)) return { ran: false, reason: `${provider.bin} CLI not installed`, ...info }
   ensureDir(outScreensDir); ensureDir(outFlowsDir)
   const budgeted = screens.slice(0, config.agent.maxScreens)
   const skipped = screens.slice(config.agent.maxScreens)
@@ -122,5 +131,5 @@ Rules:
   }
   const summary = readJson(summaryPath, { captured: [], skipped: [], flows: [] })
   if (r.status !== 0) log('agent exited non-zero:', (r.stderr || '').slice(-500))
-  return { ran: true, provider: provider.name, exit: r.status, summary, overBudget: skipped.map((s) => s.id), transcript: (r.stdout || '').slice(-4000) }
+  return { ran: true, ...info, exit: r.status, summary, overBudget: skipped.map((s) => s.id), transcript: (r.stdout || '').slice(-4000) }
 }
