@@ -46,7 +46,7 @@ export function computeSuspects({ diffDir, baseGraph, headGraph, changedFiles, p
   writeJson(path.join(diffDir, 'base', 'graph.json'), baseGraph)
   writeJson(path.join(diffDir, 'head', 'graph.json'), headGraph)
   fs.writeFileSync(path.join(diffDir, 'changed-files.txt'), changedFiles.join('\n') + '\n')
-  execFileSync('node', [path.join(SKILL_SCRIPTS, 'diff-map.mjs'), 'suspects', diffDir, '--project', projectDir, '--depth', String(depth), '--broad-cap', String(broadCap)], { stdio: ['ignore', 'inherit', 'inherit'] })
+  execFileSync('node', [path.join(SKILL_SCRIPTS, 'diff-map.mjs'), 'suspects', diffDir, '--project', projectDir, '--depth', String(depth), '--broad-cap', String(broadCap)], { stdio: ['ignore', process.stderr, 'inherit'] })
   return readJson(path.join(diffDir, 'suspects.json'))
 }
 
@@ -54,7 +54,7 @@ export function packDiff({ diffDir, device, out }) {
   const args = [path.join(SKILL_SCRIPTS, 'diff-map.mjs'), 'pack', diffDir]
   if (device) args.push('--device', device)
   if (out) args.push('--out', out)
-  execFileSync('node', args, { stdio: ['ignore', 'inherit', 'inherit'] })
+  execFileSync('node', args, { stdio: ['ignore', process.stderr, 'inherit'] })
   return out ?? fs.readdirSync(diffDir).filter((f) => f.endsWith('.appmapdiff')).map((f) => path.join(diffDir, f))[0]
 }
 
