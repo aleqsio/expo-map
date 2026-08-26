@@ -31,6 +31,7 @@ function StatusDot({ status }) {
 // states. Each row carries a status dot in Changes mode (amber changed, green
 // added, red removed); the chip lights amber when any state changed.
 function StatePicker({ states, active, baseDiffStatus, onSelect }) {
+  const [open, setOpen] = useState(false)
   const options = [
     { name: '', label: 'base screen', diff: baseDiffStatus },
     ...states.map((s) => ({ name: s.name, label: s.name, diff: s.diff ?? null })),
@@ -39,7 +40,7 @@ function StatePicker({ states, active, baseDiffStatus, onSelect }) {
   const current = options.find((o) => o.name === activeName) ?? options[0]
   const anyDiff = options.some((o) => STATE_DIFF.has(o.diff))
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -53,7 +54,15 @@ function StatePicker({ states, active, baseDiffStatus, onSelect }) {
           <ChevronDown className="size-2.5 opacity-70" aria-hidden="true" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="center" sideOffset={6} className="w-44 gap-0 p-1">
+      {/* Radix portals this, but React events still bubble up the component
+          tree — without this the pick would also read as a click on the node. */}
+      <PopoverContent
+        align="center"
+        sideOffset={6}
+        className="w-44 gap-0 p-1"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
         {options.map((o) => (
           <button
             key={o.name}
@@ -62,7 +71,7 @@ function StatePicker({ states, active, baseDiffStatus, onSelect }) {
               'flex min-h-7 w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[12px] font-medium hover:bg-muted',
               o.name === activeName && 'text-primary'
             )}
-            onClick={() => onSelect?.(o.name)}
+            onClick={() => { setOpen(false); onSelect?.(o.name) }}
           >
             <span className="w-3 shrink-0 text-primary">{o.name === activeName && <Check className="size-3" aria-hidden="true" />}</span>
             <span className="flex-1 truncate">{o.label}</span>

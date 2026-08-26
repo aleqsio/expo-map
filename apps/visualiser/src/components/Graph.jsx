@@ -125,6 +125,14 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
     fitView({ nodes: [...neighbourhood.nodes].map((id) => ({ id })), padding: 0.3, duration: 500 })
   }, [neighbourhood, fitView])
 
+  // Frame the two ends of a picked transition. This has to wait for the
+  // selection to render: a fit from inside the click handler is undone by React
+  // Flow's own re-fit when the fresh node list lands.
+  useEffect(() => {
+    if (!selectedEdge) return
+    fitView({ nodes: [{ id: selectedEdge.from }, { id: selectedEdge.to }], padding: 0.45, duration: 500, maxZoom: 1.1 })
+  }, [selectedEdge, fitView])
+
   // playhead → current node, state overrides, and the gesture on that screen
   const { currentNodeId, stateOverrides, gesture } = useMemo(() => {
     if (!flow) return { currentNodeId: null, stateOverrides: {}, gesture: null }
@@ -271,6 +279,10 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
 
   const rfNodes = useMemo(() => {
     if (!positions) return []
+    // Screens the path merely passes through get no say in their state —
+    // playback put them where they are. The flow's destination keeps its say,
+    // and so does every screen the flow never touches.
+    const midway = new Set(flow ? [...path, ...Object.keys(stateOverrides)].filter((id) => id !== flowTarget) : [])
     return map.nodes.map((n) => {
       const override = stateOverrides[n.id]
       const nodeDiff = diffMode ? n.diff ?? null : null
@@ -300,7 +312,7 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
           stateName: override?.name ?? null,
           chosenState: chosenStates[n.id] ?? null,
           onStateSelect: (name) => selectState(n.id, name),
-          statePickable: !flow || n.id === flowTarget,
+          statePickable: !midway.has(n.id),
           badgeText: statusBadge(n),
           diffMode,
           diff: nodeDiff,
@@ -465,12 +477,9 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
         onPaneClick={() => { setSelectedNode(null); setSelectedFlow(null); setSelectedEdge(null); setNeighboursMode(false) }}
         onEdgeClick={(_, e) => {
           if (!e.data?.key) return
+          const same = selectedEdge?.key === e.data.key
           setSelectedFlow(null); setSelectedNode(null); setNeighboursMode(false)
-          setSelectedEdge((cur) => {
-            if (cur?.key === e.data.key) return null
-            fitView({ nodes: [{ id: e.data.from }, { id: e.data.to }], padding: 0.45, duration: 500 })
-            return e.data
-          })
+          setSelectedEdge(same ? null : e.data)
         }}
         nodesDraggable={false}
         nodesConnectable={false}
