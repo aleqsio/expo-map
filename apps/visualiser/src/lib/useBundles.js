@@ -6,8 +6,15 @@ import { loadBundle, mergeBundles } from './loadBundle'
 // mode renders the overlay on top of the map's real captures.
 //
 // Sources, in priority order: ?map= / ?changes= URL params (CORS-fetched, for
-// PR comment links), the /diffs route (ships the demo diff), the bundled demo
-// map, and whatever the user drops or picks.
+// PR comment links), ?template= for a named demo, the legacy /diffs route, and
+// whatever the user drops or picks. Opening the bare page loads nothing: the
+// viewer's job is the bundle you bring, so it starts on the drop screen.
+
+// Named demos, so a link can hand someone a populated viewer without every
+// bare visit loading one.
+const TEMPLATES = {
+  bluesky: { map: '/demo.scrmap', changes: '/demo.diff.scrmap' },
+}
 
 async function fetchBundle(url) {
   const res = await fetch(url)
@@ -72,42 +79,47 @@ export function useBundles() {
     const params = new URLSearchParams(window.location.search)
     const mapUrl = params.get('map') ?? params.get('bundle')
     const changesUrl = params.get('changes') ?? params.get('diff')
+    const template = TEMPLATES[params.get('template') ?? ''] ?? null
+    // /diffs predates ?template= and is documented, so keep it pointed at the
+    // same bundles. It differs only in landing on the overlay, which is what
+    // the route name promises.
     const onDiffsRoute = /^\/diffs\/?$/.test(window.location.pathname)
+    const named = template ?? (onDiffsRoute ? TEMPLATES.bluesky : null)
+
+    const wantMap = mapUrl ?? named?.map ?? null
+    const wantChanges = changesUrl ?? named?.changes ?? null
+    // A template opens on the Map with Changes waiting behind the toggle. An
+    // explicit ?changes= or /diffs link is asking for the overlay itself.
+    const openOnChanges = !template
     ;(async () => {
+      // Probe the demo so the landing can offer the button, without loading it.
       try {
         const head = await fetch('/demo.scrmap', { method: 'HEAD' })
         const type = head.headers.get('content-type') ?? ''
         const size = parseInt(head.headers.get('content-length') ?? '0', 10)
-        const ok = head.ok && !type.includes('text/html') && (size > 10000 || /zip|octet-stream/.test(type))
-        setDemoAvailable(ok)
-        if (ok && !mapUrl) {
-          const demo = await fetchBundle('/demo.scrmap')
-          setPlain((cur) => cur ?? demo) // never clobber a user-opened bundle
-        }
+        setDemoAvailable(head.ok && !type.includes('text/html') && (size > 10000 || /zip|octet-stream/.test(type)))
       } catch {}
-      if (mapUrl) {
-        setBusy(true)
-        try {
-          const b = await fetchBundle(mapUrl)
+
+      if (!wantMap && !wantChanges) return // bare page: the drop screen
+
+      setBusy(true)
+      try {
+        if (wantMap) {
+          const b = await fetchBundle(wantMap)
           if (b.diff) setChanges(b)
-          else setPlain(b)
-        } catch (e) {
-          setError(String(e.message ?? e))
-        } finally {
-          setBusy(false)
+          else setPlain((cur) => cur ?? b) // never clobber a bundle dropped meanwhile
         }
-      }
-      const diffUrl = changesUrl ?? (onDiffsRoute ? '/demo.diff.scrmap' : null)
-      if (diffUrl) {
-        try {
-          const b = await fetchBundle(diffUrl)
+        if (wantChanges) {
+          const b = await fetchBundle(wantChanges)
           if (b.diff) {
             setChanges(b)
-            setMode('changes')
+            if (openOnChanges) setMode('changes')
           }
-        } catch (e) {
-          setError(String(e.message ?? e))
         }
+      } catch (e) {
+        setError(String(e.message ?? e))
+      } finally {
+        setBusy(false)
       }
     })()
   }, [])

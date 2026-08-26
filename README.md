@@ -2,7 +2,7 @@
 
 A Claude Code skill that produces a **visual navigation map of an Expo / React Native app**: every screen as a card with a real screenshot, runtime state variants (bottom sheets, dialogs, drawers), the navigation edges between screens, and **replayable [argent](https://argent.swmansion.com) flows** recording how to reach each screen (headless replay: `argent flow run`) — packed into a portable `.scrmap` bundle and explored in an interactive visualiser.
 
-**Visualiser (hosted):** https://app.screenmap.dev — drop a `.scrmap` (the **Map**) and/or a `.diff.scrmap` (the **Changes** overlay for a PR); everything parses client-side, nothing uploads. Deep links: `?map=<url>&changes=<url>` load bundles from any CORS-readable URL (e.g. a raw GitHub URL); `/diffs` opens the bundled demo diff.
+**Visualiser (hosted):** https://app.screenmap.dev — drop a `.scrmap` (the **Map**) and/or a `.diff.scrmap` (the **Changes** overlay for a PR); everything parses client-side, nothing uploads. Opening it bare gives you the drop screen. Deep links: `?map=<url>&changes=<url>` load bundles from any CORS-readable URL (e.g. a raw GitHub URL) and open on Changes; `?template=bluesky` loads the bundled demo map and diff and opens on the Map, with Changes behind the toggle; `/diffs` loads the same pair and opens on Changes.
 
 ## How it works
 
