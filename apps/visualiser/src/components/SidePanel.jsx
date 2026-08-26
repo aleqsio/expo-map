@@ -46,8 +46,11 @@ export default function SidePanel({ title, count, open, onToggle, items, footer 
                 onClick={(e) => { e.currentTarget.blur(); it.onClick() }}
                 className={cn(
                   'flex min-h-[34px] w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] transition-[background-color,scale] duration-150 active:scale-[0.98]',
-                  'hover:bg-muted/70',
-                  it.active && 'bg-foreground text-background'
+                  // Either/or, never both: a hover variant outranks a flat
+                  // background, so pairing them painted pale grey under the
+                  // active row's paper label for as long as the pointer stayed
+                  // where you clicked, which is exactly where it ends up.
+                  it.active ? 'bg-foreground text-background' : 'hover:bg-muted/70'
                 )}
               >
                 <RowMark kind={it.kind} />
