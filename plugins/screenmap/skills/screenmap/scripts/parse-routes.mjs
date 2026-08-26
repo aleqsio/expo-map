@@ -5,7 +5,7 @@
 //                      Bluesky's src/routes.ts) plus Navigation.tsx screen bindings
 //
 // Usage: node parse-routes.mjs [projectRoot] [--out <path>] [--routes <file>]
-// Output: JSON graph (default <projectRoot>/.expo-map/graph.json)
+// Output: JSON graph (default <projectRoot>/.screenmap/out/graph.json)
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -20,7 +20,7 @@ for (let i = 0; i < args.length; i++) {
   else projectRoot = args[i]
 }
 projectRoot = path.resolve(projectRoot)
-outPath = outPath ?? path.join(projectRoot, '.expo-map', 'graph.json')
+outPath = outPath ?? path.join(projectRoot, '.screenmap', 'out', 'graph.json')
 
 // ---------- shared helpers ----------
 

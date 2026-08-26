@@ -77,7 +77,8 @@ function StatePicker({ states, active, baseDiffStatus, onSelect }) {
 export default function ScreenNode({ data, selected }) {
   const {
     node, img, imgBase = null, states = [], baseStates = [], badgeText, hue, dimmed, onPath, isCurrent,
-    stateName, chosenState, gesture, onStateSelect, diffMode, diff, baseDiffStatus = null, flip = false,
+    stateName, chosenState, gesture, onStateSelect, statePickable = true,
+    diffMode, diff, baseDiffStatus = null, flip = false,
   } = data
   const broken = BROKEN[node.capture.status]
 
@@ -155,11 +156,11 @@ export default function ScreenNode({ data, selected }) {
         <span className="dot" />
         <span className="path" title={node.file ?? ''}>{node.urlPath}</span>
       </div>
-      {states.length > 0 && !stateName && !isCurrent ? (
+      {states.length === 0 ? null : statePickable ? (
         <StatePicker states={states} active={activeState} baseDiffStatus={baseDiffStatus} onSelect={onStateSelect} />
-      ) : states.length > 0 && (stateName || isCurrent) ? (
+      ) : (
         <div className="state-chip static" title="controlled by flow playback"><span className="lbl">{activeState ?? 'base screen'}</span></div>
-      ) : null}
+      )}
       {badgeText && <div className="node-badge">{badgeText}</div>}
       <Handle type="source" position={Position.Bottom} className="port" />
     </div>

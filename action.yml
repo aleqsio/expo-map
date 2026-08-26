@@ -1,6 +1,6 @@
 # Marketplace metadata: must live at the repo root; a bare name would
 # collide with AppLand's AppMap listing, hence the repo-matching name.
-name: expo-map
+name: screenmap
 description: >-
   Map every screen of an Expo / React Native app and review what a pull request changes on-screen.
   PR runs diff the head against a cached baseline map, capture only the affected screens on an iOS
@@ -194,7 +194,7 @@ runs:
       uses: actions/upload-artifact@v4
       with:
         name: screenmap-diagnostics-${{ github.run_id }}
-        path: ${{ inputs.project }}/.expo-map/ci/diag
+        path: ${{ inputs.project }}/.screenmap/out/ci/diag
         retention-days: 7
         if-no-files-found: ignore
 

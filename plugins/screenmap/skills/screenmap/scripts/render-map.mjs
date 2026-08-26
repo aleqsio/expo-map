@@ -2,7 +2,7 @@
 // Renders graph.json + captured screenshots into a self-contained HTML map.
 //
 // Usage: node render-map.mjs [graphPath] [--shots <dir>] [--out <path>] [--no-embed]
-//   graphPath  default: ./.expo-map/graph.json
+//   graphPath  default: ./.screenmap/out/graph.json
 //   --shots    default: <graph dir>/screens
 //   --out      default: <graph dir>/map.html
 //
@@ -24,7 +24,7 @@ for (let i = 0; i < args.length; i++) {
   else if (args[i] === '--no-embed') embed = false
   else graphPath = args[i]
 }
-graphPath = path.resolve(graphPath ?? path.join('.expo-map', 'graph.json'))
+graphPath = path.resolve(graphPath ?? path.join('.screenmap', 'out', 'graph.json'))
 const baseDir = path.dirname(graphPath)
 shotsDir = path.resolve(shotsDir ?? path.join(baseDir, 'screens'))
 outPath = path.resolve(outPath ?? path.join(baseDir, 'map.html'))

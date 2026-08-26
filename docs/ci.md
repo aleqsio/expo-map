@@ -82,7 +82,7 @@ node screenmap-ci.mjs baseline --project ~/app --out /tmp/main.scrmap
 # a PR diff: checkout the head, point at the baseline, name the base commit
 node screenmap-ci.mjs pr --project ~/app --baseline /tmp/main.scrmap --base <sha> --pr 42 --title "…" --out /tmp/pr42.diff.scrmap
 # preview the comment
-node screenmap-ci.mjs comment --summary ~/app/.expo-map/ci/pr/summary.json --map-url … --changes-url …
+node screenmap-ci.mjs comment --summary ~/app/.screenmap/out/ci/pr/summary.json --map-url … --changes-url …
 ```
 
 `--only id,id`, `--limit N`, `--no-agent`, `--no-sim` (static only) help while iterating.

@@ -19,8 +19,8 @@ export function flowForNode(map, nodeId) {
 export function replayCommand(flow, appName) {
   const lines = [
     `# ${appName} · replay flow "${flow.name}" — ${flow.title ?? ''}`.trimEnd(),
-    `# run from the app's project root (flows live in .expo-map/flows/)`,
-    `npx @swmansion/argent flow run .expo-map/flows/${flow.name}.yaml`,
+    `# run from the app's project root (flows live in .screenmap/out/flows/)`,
+    `npx @swmansion/argent flow run .screenmap/out/flows/${flow.name}.yaml`,
   ]
   if (!isInteractive(flow)) {
     const links = (flow.steps ?? []).filter((st) => st.action === 'open_url' && st.url)

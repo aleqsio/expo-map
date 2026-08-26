@@ -1,6 +1,6 @@
 ---
 name: screenmap-project
-description: Project-specific guidance for the screenmap agent when it explores screens of THIS app in CI. Layered on top of the generic expo-map skill.
+description: Project-specific guidance for the screenmap agent when it explores screens of THIS app in CI. Layered on top of the generic screenmap skill.
 ---
 
 # How to explore this app

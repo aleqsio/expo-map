@@ -9,11 +9,11 @@ Produce a visual map of an Expo app's navigation: every expo-router route as a c
 
 **Arguments:** optional path to the Expo project (default: current working directory). `--static` = skip the simulator phases and render a screenshot-less map. `pr <number>` or `diff <base>..<head>` = PR diff mode (see bottom).
 
-**Working directory contract:** all outputs go to `<project>/.expo-map/` — `graph.json`, `screens/*.png`, `flows/*.yaml` + `flows/*.meta.json`, `map.html`. Suggest adding `.expo-map/` to the project's `.gitignore` at the end.
+**Working directory contract:** all outputs go to `<project>/.screenmap/out/` — `graph.json`, `screens/*.png`, `flows/*.yaml` + `flows/*.meta.json`, `map.html`. Suggest adding `.screenmap/out/` to the project's `.gitignore` at the end.
 
 ## Flow recording (do this throughout Phases 4–5)
 
-Every interaction sequence you perform is recorded as a **replayable flow**, written at the moment you perform it — not reconstructed afterwards. Flows use the **argent flow format** (argent.swmansion.com — Software Mansion's agentic mobile toolkit): a `<name>.yaml` argent flow plus a `<name>.meta.json` cartography sidecar, both in `<project>/.expo-map/flows/`. Anyone replays a flow headlessly, no LLM in the loop: `npx @swmansion/argent flow run .expo-map/flows/<name>.yaml`. Full pair schema: `docs/scrmap-format.md` in the skill repo.
+Every interaction sequence you perform is recorded as a **replayable flow**, written at the moment you perform it — not reconstructed afterwards. Flows use the **argent flow format** (argent.swmansion.com — Software Mansion's agentic mobile toolkit): a `<name>.yaml` argent flow plus a `<name>.meta.json` cartography sidecar, both in `<project>/.screenmap/out/flows/`. Anyone replays a flow headlessly, no LLM in the loop: `npx @swmansion/argent flow run .screenmap/out/flows/<name>.yaml`. Full pair schema: `docs/scrmap-format.md` in the skill repo.
 
 ```yaml
 # Open item details and expand the sheet to 50%
@@ -48,7 +48,7 @@ Rules:
 node <this skill's dir>/scripts/parse-routes.mjs <project>
 ```
 
-Read the produced `<project>/.expo-map/graph.json` and report the summary to the user: route count, layouts (with navigator types), edges (flag unresolved ones), routes with state hints, routes needing params. If the parser finds no `app/` directory, this is not an expo-router project — say so and stop (bare react-navigation apps are not supported yet).
+Read the produced `<project>/.screenmap/out/graph.json` and report the summary to the user: route count, layouts (with navigator types), edges (flag unresolved ones), routes with state hints, routes needing params. If the parser finds no `app/` directory, this is not an expo-router project — say so and stop (bare react-navigation apps are not supported yet).
 
 If `--static` was requested, jump to Phase 6.
 
@@ -76,7 +76,7 @@ For each route in `graph.json` (substituting params from Phase 2; for `+not-foun
 
 1. `open_url` (or `xcrun simctl openurl booted "<url>"`) with the route's deep link.
 2. Wait ~1–1.5s for the transition (MCP `wait`). Content screens that fetch over the network need 3–4s — a capture showing a spinner or loading skeleton means the wait was too short, not that the route is broken; the Phase 4b review catches these, and you re-capture with a longer wait.
-3. Capture to disk: `xcrun simctl io booted screenshot <project>/.expo-map/screens/<slug>.png` — use the exact `slug` from `graph.json`; the renderer depends on this naming. (MCP `screenshot` is for your own eyes only; it doesn't save a file.)
+3. Capture to disk: `xcrun simctl io booted screenshot <project>/.screenmap/out/screens/<slug>.png` — use the exact `slug` from `graph.json`; the renderer depends on this naming. (MCP `screenshot` is for your own eyes only; it doesn't save a file.)
 4. Every few routes, sanity-check via MCP `screenshot` that you're capturing real screens. If a route shows a red error screen, an error boundary, or redirected somewhere else, still keep the capture but note it for the final report.
 
 ### Phase 4b — review and recover (do not skip)
@@ -84,7 +84,7 @@ For each route in `graph.json` (substituting params from Phase 2; for `+not-foun
 Error boundaries **stick**: once a bad deep link crashes a screen, subsequent deep links may render into the same error boundary, silently poisoning every capture after it. So before delivering:
 
 1. Render a draft map (Phase 6 commands) and *look at it* — it doubles as a contact sheet of all captures.
-2. Classify every capture that isn't clearly the real screen, and write the verdicts to `<project>/.expo-map/capture-status.json` (the renderer badges them on the map):
+2. Classify every capture that isn't clearly the real screen, and write the verdicts to `<project>/.screenmap/out/capture-status.json` (the renderer badges them on the map):
 
    ```json
    { "<routeId>": { "status": "not-found", "needsNavigation": true, "note": "why + what a future agent should do instead" } }
@@ -132,19 +132,19 @@ These flows are what make edges *pinnable*: a nav flow tapping through a transit
 ## Phase 6 — pack, render, deliver
 
 ```bash
-for f in <project>/.expo-map/screens/*.png; do sips -Z 800 "$f" >/dev/null; done   # downscale
-node <this skill's dir>/scripts/pack-map.mjs <project>        # → .expo-map/<app>-<date>.scrmap bundle
-node <this skill's dir>/scripts/render-map.mjs <project>/.expo-map/graph.json   # static HTML fallback
+for f in <project>/.screenmap/out/screens/*.png; do sips -Z 800 "$f" >/dev/null; done   # downscale
+node <this skill's dir>/scripts/pack-map.mjs <project>        # → .screenmap/out/<app>-<date>.scrmap bundle
+node <this skill's dir>/scripts/render-map.mjs <project>/.screenmap/out/graph.json   # static HTML fallback
 ```
 
-The `.scrmap` bundle (zip: manifest.json + map.json + screens/) is the primary deliverable — see `docs/scrmap-format.md` in the skill repo. Open it in the **visualiser** (`apps/visualiser` in the skill repo, `npm run dev`, drag the bundle in): interactive graph, flow playback, click-to-copy replay commands. Send the bundle with SendUserFile; send `map.html` too as the no-tooling fallback (display: render). Report: routes captured / total, state variants captured, anything skipped (error screens, auth redirects, un-triggerable sheets), unresolved edges. Offer to publish as an Artifact (if so, load the artifact-design skill first and rebuild the page body-only per Artifact rules — don't publish the full-document HTML as-is). Suggest adding `.expo-map/` to `.gitignore`.
+The `.scrmap` bundle (zip: manifest.json + map.json + screens/) is the primary deliverable — see `docs/scrmap-format.md` in the skill repo. Open it in the **visualiser** (`apps/visualiser` in the skill repo, `npm run dev`, drag the bundle in): interactive graph, flow playback, click-to-copy replay commands. Send the bundle with SendUserFile; send `map.html` too as the no-tooling fallback (display: render). Report: routes captured / total, state variants captured, anything skipped (error screens, auth redirects, un-triggerable sheets), unresolved edges. Offer to publish as an Artifact (if so, load the artifact-design skill first and rebuild the page body-only per Artifact rules — don't publish the full-document HTML as-is). Suggest adding `.screenmap/out/` to `.gitignore`.
 
 ## Replay mode — `/screenmap replay <flow-name>`
 
 Flows are argent YAML, so the primary replay is **headless**:
 
 ```bash
-npx @swmansion/argent flow run <project>/.expo-map/flows/<flow-name>.yaml
+npx @swmansion/argent flow run <project>/.screenmap/out/flows/<flow-name>.yaml
 ```
 
 Run that first (it needs no LLM and reports pass/fail per step). Fall back to manual replay only when argent isn't installed and can't be (`npx` unavailable) or when the flow fails and the user wants a diagnosis: execute the YAML steps yourself — `open-url`/`wait` via `xcrun simctl`, taps/swipes via the simulator MCP using the sidecar's `target` labels as the source of truth (recorded coordinates are hints that may have drifted). Verify each step with an MCP screenshot; if a target can't be found in 3 attempts, stop and report which step failed and what the screen showed instead. Same safety rules as Phase 5: never trigger destructive or submitting controls.
@@ -157,7 +157,7 @@ The deliverable is a `.diff.scrmap` bundle (format: `docs/diff-scrmap-format.md`
 skill repo) — the visualiser renders it with green/amber/red highlights, a Changes
 panel, and base-vs-head comparison per screen.
 
-Working directory: `<project>/.expo-map/diff/<slug>/` where slug is `pr-<number>` or
+Working directory: `<project>/.screenmap/out/diff/<slug>/` where slug is `pr-<number>` or
 `<base>..<head>`. Verdicts are **static-only** (a screen is "changed" iff the change
 set touches its file or import closure); screenshots are evidence for the reviewer,
 not input to the classification.
@@ -181,11 +181,11 @@ not input to the classification.
 
 ```bash
 git -C <project> checkout --detach <baseSha>
-node <skill>/scripts/parse-routes.mjs <project>   # writes .expo-map/graph.json
-cp <project>/.expo-map/graph.json <diffDir>/base/graph.json
+node <skill>/scripts/parse-routes.mjs <project>   # writes .screenmap/out/graph.json
+cp <project>/.screenmap/out/graph.json <diffDir>/base/graph.json
 git -C <project> checkout --detach <headSha>
 node <skill>/scripts/parse-routes.mjs <project>
-cp <project>/.expo-map/graph.json <diffDir>/head/graph.json
+cp <project>/.screenmap/out/graph.json <diffDir>/head/graph.json
 node <skill>/scripts/diff-map.mjs suspects <diffDir> --project <project>
 ```
 
@@ -264,5 +264,5 @@ changed-pixels render).
 ## Web fallback (no macOS simulator available, or user asks for web)
 
 - Start `npx expo start --web`, confirm `http://localhost:8081/_sitemap` lists the same routes as the parse (good cross-check).
-- Capture each route with `npx playwright screenshot --viewport-size=390,844 "http://localhost:8081<urlPath>" <project>/.expo-map/screens/<slug>.png` (needs `npx playwright install chromium` once; ask before installing).
+- Capture each route with `npx playwright screenshot --viewport-size=390,844 "http://localhost:8081<urlPath>" <project>/.screenmap/out/screens/<slug>.png` (needs `npx playwright install chromium` once; ask before installing).
 - State pass on web: drive the browser pane manually (tap triggers), but note playwright captures are the ones saved to disk — for sheet states, prefer `npx playwright screenshot --full-page` after using its `--wait-for-timeout` or skip and note the limitation.

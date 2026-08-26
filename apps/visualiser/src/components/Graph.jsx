@@ -71,6 +71,10 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
   const routeById = useMemo(() => Object.fromEntries(map.nodes.map((n) => [n.id, n])), [map])
   const flow = selectedFlow ? map.flows.find((f) => f.name === selectedFlow) : null
   const path = flow ? paths[flow.name] ?? [] : []
+  // Where the flow lands. Its state stays the viewer's to pick even mid-replay;
+  // the screens the path merely passes through don't get a say — their state is
+  // whatever playback put there.
+  const flowTarget = flow ? flow.route ?? path[path.length - 1] ?? null : null
 
   // transitions observed in flow recordings but absent from static analysis
   const observedEdges = useMemo(() => {
@@ -205,13 +209,16 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
     [positions, setCenter, getZoom]
   )
 
-  const jumpToState = useCallback(
-    (nodeId, stateName) => {
+  // Park playback wherever a capture was taken: the flow that shot it, at that
+  // step. `name` is '' for the bare screen.
+  const jumpToCapture = useCallback(
+    (nodeId, name) => {
       const node = map.nodes.find((n) => n.id === nodeId)
-      const state = node?.capture.states.find((s) => s.name === stateName)
-      if (!state) return false
+      if (!node) return false
+      const shot = name ? node.capture.states.find((s) => s.name === name)?.screenshot : node.capture.screenshot
+      if (!shot) return false
       for (const f of map.flows) {
-        const idx = (f.steps ?? []).findIndex((st) => st.action === 'screenshot' && 'screens/' + st.file === state.screenshot)
+        const idx = (f.steps ?? []).findIndex((st) => st.action === 'screenshot' && 'screens/' + st.file === shot)
         if (idx >= 0) {
           setSelectedFlow(f.name)
           setStep(idx)
@@ -221,6 +228,21 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
       return false
     },
     [map]
+  )
+
+  // Picking a state on the screen that is already the subject keeps that screen
+  // active and re-points playback at whichever flow reaches the state — the
+  // route under the screen changes, the screen doesn't. On any other node the
+  // pick is just a change of what that node displays.
+  const selectState = useCallback(
+    (nodeId, name) => {
+      setChosenStates((prev) => ({ ...prev, [nodeId]: name || undefined }))
+      if (nodeId !== subjectId) return
+      setSelectedEdge(null)
+      setSelectedNode(nodeId)
+      if (!jumpToCapture(nodeId, name)) setSelectedFlow(null)
+    },
+    [subjectId, jumpToCapture]
   )
 
   // shot mode: once nodes are laid out, frame just the changed screens and
@@ -277,7 +299,8 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
           flip,
           stateName: override?.name ?? null,
           chosenState: chosenStates[n.id] ?? null,
-          onStateSelect: (stateName) => setChosenStates((prev) => ({ ...prev, [n.id]: stateName || undefined })),
+          onStateSelect: (name) => selectState(n.id, name),
+          statePickable: !flow || n.id === flowTarget,
           badgeText: statusBadge(n),
           diffMode,
           diff: nodeDiff,
@@ -293,7 +316,7 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
         },
       }
     })
-  }, [positions, map, images, flow, path, currentNodeId, stateOverrides, gesture, selectedNode, chosenStates, selectedEdge, edgeGesture, neighbourhood, subjectId, diffMode, flip])
+  }, [positions, map, images, flow, flowTarget, path, currentNodeId, stateOverrides, gesture, selectedNode, chosenStates, selectState, selectedEdge, edgeGesture, neighbourhood, subjectId, diffMode, flip])
 
   const rfEdges = useMemo(() => {
     const infos = new Map()
@@ -428,7 +451,7 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
           if (selectedNode === n.id) { setSelectedNode(null); setSelectedFlow(null); return }
           setSelectedNode(n.id)
           const chosen = chosenStates[n.id]
-          if (chosen && jumpToState(n.id, chosen)) return
+          if (chosen && jumpToCapture(n.id, chosen)) return
           const f = flowForNode(map, n.id)
           if (f) {
             setSelectedFlow(f.name)

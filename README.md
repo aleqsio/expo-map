@@ -37,7 +37,7 @@ Then in any Expo/RN project, in Claude Code:
 /screenmap pr <number>          # PR diff: which screens/states/edges changed → .diff.scrmap
 ```
 
-Outputs land in `<project>/.expo-map/` (git-ignore it).
+Outputs land in `<project>/.screenmap/out/` (git-ignore it).
 
 ## Run the visualiser locally
 

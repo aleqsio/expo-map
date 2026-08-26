@@ -3,7 +3,7 @@
 A `.scrmap` file is a plain **zip** containing everything needed to render an application's
 navigation map: the graph, screenshots, capture verdicts, and replayable flows.
 It is the *interchange* format — the screenmap skill's working directory
-(`.expo-map/` with `graph.json`, `capture-status.json`, `flows/`, `screens/`) is the
+(`.screenmap/out/` with `graph.json`, `capture-status.json`, `flows/`, `screens/`) is the
 append-friendly *working* format, and `pack-map.mjs` merges it into a bundle.
 
 The format is producer-agnostic: nothing in it is expo-specific. Any tool that can
@@ -11,7 +11,7 @@ enumerate screens, capture them, and describe transitions can emit a bundle.
 
 **Flows are [argent](https://argent.swmansion.com) flow YAML** — Software Mansion's
 agentic mobile toolkit — so every flow in a bundle replays headlessly, no LLM in the
-loop: `argent flow run .expo-map/flows/<name>.yaml`. A `.meta.json` sidecar per flow
+loop: `argent flow run .screenmap/out/flows/<name>.yaml`. A `.meta.json` sidecar per flow
 carries the cartography argent doesn't model: route ids, per-step screen hops,
 capture files, and human target labels.
 

@@ -119,7 +119,7 @@ async function captureRoutes({ project, config, scheme, session, routes, flows, 
 async function baseline() {
   const project = path.resolve(opts.project ?? '.')
   const config = loadConfig(project)
-  const work = path.join(project, '.expo-map', 'ci', 'baseline')
+  const work = path.join(project, '.screenmap', 'out', 'ci', 'baseline')
   fs.rmSync(work, { recursive: true, force: true }); ensureDir(work)
   const graph = parseRoutes(project, path.join(work, 'graph.json'))
   const scheme = config.scheme ?? graph.scheme
@@ -158,7 +158,7 @@ async function baseline() {
   if (opts.only) { const only = new Set(String(opts.only).split(',')); routes = routes.filter((r) => only.has(r.id)) }
   if (opts.limit) routes = routes.slice(0, Number(opts.limit))
 
-  const flowDirs = [config.flowsDir, '.expo-map/flows']
+  const flowDirs = [config.flowsDir, '.screenmap/out/flows']
   const flows = loadFlows(project, flowDirs)
   const flowsDirForPack = flowDirs.map((d) => path.resolve(project, d)).find((d) => exists(d)) ?? path.resolve(project, config.flowsDir)
   let cap = { replay: [], deeplink: [], agent: [], failed: [], unflowed: [] }
@@ -188,7 +188,7 @@ async function pr() {
   const project = path.resolve(opts.project ?? '.')
   const config = loadConfig(project)
   if (!opts.baseline || !exists(opts.baseline)) throw new Error('--baseline <file.scrmap> is required (the base-side map)')
-  const work = path.join(project, '.expo-map', 'ci', 'pr')
+  const work = path.join(project, '.screenmap', 'out', 'ci', 'pr')
   fs.rmSync(work, { recursive: true, force: true }); ensureDir(work)
   const base = readBaseline(opts.baseline, path.join(work, 'base-bundle'))
   const headGraph = parseRoutes(project, path.join(work, 'head-graph.json'))
@@ -215,7 +215,7 @@ async function pr() {
 
   // head side: capture suspects on the PR head
   const headRoutes = suspects.capture.filter((c) => c.side !== 'base').map((c) => ({ ...headGraph.routes.find((r) => r.id === c.id), reason: `${c.status}: ${c.reason}${c.via?.length ? ' via ' + c.via.join(', ') : ''}` })).filter((r) => r.id)
-  const flows = loadFlows(project, [config.flowsDir, '.expo-map/flows'])
+  const flows = loadFlows(project, [config.flowsDir, '.screenmap/out/flows'])
   let cap = { replay: [], deeplink: [], agent: [], failed: [], unflowed: [] }
   let deviceName = config.device
   if (headRoutes.length && !opts['no-sim']) {
@@ -331,7 +331,7 @@ async function shot() {
 async function resolveAppCmd() {
   const { resolveApp } = await import('./lib/eas.mjs')
   const project = path.resolve(opts.project ?? '.')
-  const res = resolveApp({ projectDir: project, profile: opts.profile ?? 'development-simulator', workDir: path.resolve(opts.work ?? path.join(project, '.expo-map', 'ci', 'eas')) })
+  const res = resolveApp({ projectDir: project, profile: opts.profile ?? 'development-simulator', workDir: path.resolve(opts.work ?? path.join(project, '.screenmap', 'out', 'ci', 'eas')) })
   console.log(JSON.stringify(res, null, 2))
 }
 

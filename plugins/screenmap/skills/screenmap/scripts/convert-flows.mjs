@@ -19,7 +19,7 @@ for (let i = 0; i < args.length; i++) {
   else if (args[i] === '--delete-v1') deleteV1 = true
   else projectRoot = args[i]
 }
-const flowsDir = path.join(path.resolve(projectRoot), '.expo-map', 'flows')
+const flowsDir = path.join(path.resolve(projectRoot), '.screenmap', 'out', 'flows')
 
 const yq = (s) => `"${String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 const norm = (v, axis) => Math.round((v / pointSize[axis]) * 10000) / 10000

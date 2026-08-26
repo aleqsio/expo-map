@@ -1,0 +1,194 @@
+{
+  "generatedAt": "2026-08-03T15:55:29.685Z",
+  "projectRoot": "/Users/aleqsio/Projects/expo-map/fixtures/demo-app",
+  "scheme": "demoapp",
+  "deepLinkTemplates": {
+    "devBuild": "demoapp://<urlPath minus leading slash>",
+    "expoGo": "exp://127.0.0.1:8081/--<urlPath>"
+  },
+  "mode": "expo-router",
+  "appDir": "app",
+  "layouts": [
+    {
+      "file": "app/(tabs)/_layout.tsx",
+      "dir": "(tabs)",
+      "navigator": "Tabs"
+    },
+    {
+      "file": "app/_layout.tsx",
+      "dir": "",
+      "navigator": "Stack"
+    }
+  ],
+  "routes": [
+    {
+      "id": "(tabs)/home",
+      "file": "app/(tabs)/home.tsx",
+      "urlPath": "/home",
+      "slug": "tabs_home",
+      "params": [],
+      "navigator": "Tabs",
+      "layoutDir": "(tabs)",
+      "presentation": null,
+      "stateHints": [
+        {
+          "type": "rn-modal"
+        }
+      ]
+    },
+    {
+      "id": "(tabs)/settings",
+      "file": "app/(tabs)/settings.tsx",
+      "urlPath": "/settings",
+      "slug": "tabs_settings",
+      "params": [],
+      "navigator": "Tabs",
+      "layoutDir": "(tabs)",
+      "presentation": null,
+      "stateHints": []
+    },
+    {
+      "id": "+not-found",
+      "file": "app/+not-found.tsx",
+      "urlPath": "/+not-found",
+      "slug": "+not-found",
+      "params": [],
+      "navigator": "Stack",
+      "layoutDir": "",
+      "presentation": null,
+      "stateHints": []
+    },
+    {
+      "id": "about",
+      "file": "app/about.tsx",
+      "urlPath": "/about",
+      "slug": "about",
+      "params": [],
+      "navigator": "Stack",
+      "layoutDir": "",
+      "presentation": null,
+      "stateHints": []
+    },
+    {
+      "id": "details/[id]",
+      "file": "app/details/[id].tsx",
+      "urlPath": "/details/[id]",
+      "slug": "details_id",
+      "params": [
+        "id"
+      ],
+      "navigator": "Stack",
+      "layoutDir": "",
+      "presentation": null,
+      "stateHints": [
+        {
+          "type": "bottom-sheet",
+          "lib": "gorhom-bottom-sheet",
+          "snapPoints": [
+            "25%",
+            "50%",
+            "90%"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "index",
+      "file": "app/index.tsx",
+      "urlPath": "/",
+      "slug": "index",
+      "params": [],
+      "navigator": "Stack",
+      "layoutDir": "",
+      "presentation": null,
+      "stateHints": []
+    },
+    {
+      "id": "modal",
+      "file": "app/modal.tsx",
+      "urlPath": "/modal",
+      "slug": "modal",
+      "params": [],
+      "navigator": "Stack",
+      "layoutDir": "",
+      "presentation": "modal",
+      "stateHints": [
+        {
+          "type": "router-modal",
+          "presentation": "modal"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "(tabs)/home",
+      "to": "about",
+      "raw": "/about",
+      "target": "/about"
+    },
+    {
+      "from": "(tabs)/home",
+      "to": "details/[id]",
+      "raw": "/details/[id]",
+      "target": "/details/[id]"
+    },
+    {
+      "from": "+not-found",
+      "to": "index",
+      "raw": "/",
+      "target": "/"
+    },
+    {
+      "from": "about",
+      "to": "modal",
+      "raw": "./modal",
+      "target": "/modal"
+    },
+    {
+      "from": "details/[id]",
+      "to": "details/[id]",
+      "raw": "/details/${Number(id) + 1}",
+      "target": "/details/${Number(id) + 1}"
+    },
+    {
+      "from": "details/[id]",
+      "to": "index",
+      "raw": "/",
+      "target": "/"
+    },
+    {
+      "from": "index",
+      "to": "about",
+      "raw": "/about",
+      "target": "/about"
+    },
+    {
+      "from": "index",
+      "to": "details/[id]",
+      "raw": "/details/42",
+      "target": "/details/42"
+    },
+    {
+      "from": "index",
+      "to": "(tabs)/home",
+      "raw": "/(tabs)/home",
+      "target": "/(tabs)/home"
+    },
+    {
+      "from": "index",
+      "to": "modal",
+      "raw": "/modal",
+      "target": "/modal"
+    }
+  ],
+  "summary": {
+    "mode": "expo-router",
+    "routes": 7,
+    "layouts": 2,
+    "edges": 10,
+    "unresolvedEdges": 0,
+    "routesWithStateHints": 3,
+    "routesNeedingParams": 1
+  }
+}

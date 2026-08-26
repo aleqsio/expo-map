@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Packs an .expo-map/ working directory into a distributable .scrmap bundle (zip).
+// Packs an .screenmap/out/ working directory into a distributable .scrmap bundle (zip).
 // Usage: node pack-map.mjs [projectRoot] [--out <file.scrmap>]
 // See docs/scrmap-format.md for the format contract.
 
@@ -15,7 +15,7 @@ for (let i = 0; i < args.length; i++) {
   else projectRoot = args[i]
 }
 projectRoot = path.resolve(projectRoot)
-const base = path.join(projectRoot, '.expo-map')
+const base = path.join(projectRoot, '.screenmap', 'out')
 
 const graph = JSON.parse(fs.readFileSync(path.join(base, 'graph.json'), 'utf8'))
 let captureStatus = {}

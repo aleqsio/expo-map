@@ -4,5 +4,5 @@ dist/
 *.log
 
 # generated map outputs
-.expo-map/
+.screenmap/out/
 .vercel

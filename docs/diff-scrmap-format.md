@@ -117,11 +117,11 @@ Semantics:
 
 ## Working directory
 
-The expo-map skill assembles diffs under `<project>/.expo-map/diff/<slug>/`
+The screenmap skill assembles diffs under `<project>/.screenmap/out/diff/<slug>/`
 (`pr-<number>` or `<baseRef>..<headRef>`):
 
 ```
-.expo-map/diff/pr-11123/
+.screenmap/out/diff/pr-11123/
 ├── pr.json               # {number,title,url,baseSha,headSha,baseRef,headRef}
 ├── changed-files.txt     # one path per line (git diff --name-only base...head)
 ├── base/graph.json       # parse-routes.mjs output at base

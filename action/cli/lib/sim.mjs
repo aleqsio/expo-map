@@ -30,7 +30,7 @@ function muteDevMenu(udid, bundleId) {
 // Belt-and-braces for the same prompt: OCR the screen and tap "Open".
 function tapOpenPrompt(udid, projectDir) {
   if (!ocrAvailable()) return false
-  const shot = path.join(projectDir, '.expo-map', 'ci', 'open-prompt.png')
+  const shot = path.join(projectDir, '.screenmap', 'out', 'ci', 'open-prompt.png')
   fs.mkdirSync(path.dirname(shot), { recursive: true })
   sh('xcrun', ['simctl', 'io', udid, 'screenshot', shot])
   const items = ocr(shot)
@@ -186,7 +186,7 @@ export async function openSession({ projectDir, config, scheme }) {
   if (!bundledOk) {
     log('metro tail:\n' + metro.output().split('\n').slice(-25).join('\n'))
     try {
-      const diagDir = path.join(projectDir, '.expo-map', 'ci', 'diag')
+      const diagDir = path.join(projectDir, '.screenmap', 'out', 'ci', 'diag')
       fs.mkdirSync(diagDir, { recursive: true })
       sh('xcrun', ['simctl', 'io', udid, 'screenshot', path.join(diagDir, 'connect-timeout.png')])
       fs.writeFileSync(path.join(diagDir, 'metro.log'), metro.output())
