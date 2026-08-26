@@ -51,9 +51,10 @@ export function publishToBranch({ repo, branch = 'screenmaps', files, message, c
   sh('git', ['push', '-q', 'origin', `HEAD:${branch}`], { cwd: wt })
   const sha = sh('git', ['rev-parse', 'HEAD'], { cwd: wt })
   git(['worktree', 'remove', '--force', wt])
-  const urls = Object.fromEntries(files.map((f) => [f.dest, `https://raw.githubusercontent.com/${repo}/${sha}/${f.dest}`]))
+  const base = `https://raw.githubusercontent.com/${repo}/${sha}`
+  const urls = Object.fromEntries(files.map((f) => [f.dest, `${base}/${f.dest}`]))
   log(`published ${files.length} file(s) to ${branch}@${sha.slice(0, 7)}`)
-  return { sha, urls }
+  return { sha, base, urls }
 }
 
 export function openFlowsPR({ repo, base = 'main', flowsSrcDir, flowsDestDir = '.screenmap/flows', title, body, cwd = process.cwd() }) {

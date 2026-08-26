@@ -127,7 +127,7 @@ Deep links are shorthands; the map's primary flow for each screen is the path a 
 - End each flow with a screenshot step of the target (`<slug>.png`).
 - Screens with no discoverable in-app path (deep-link-only, or requiring data the account lacks) — record that in capture-status notes instead of forcing it.
 
-These flows are what make edges *pinnable*: a nav flow tapping through a transition tells the visualiser exactly where the trigger sits on the source screen.
+These flows are what make edges *pinnable*: a nav flow tapping through a transition tells the map viewer exactly where the trigger sits on the source screen.
 
 ## Phase 6 — pack, render, deliver
 
@@ -137,7 +137,7 @@ node <this skill's dir>/scripts/pack-map.mjs <project>        # → .screenmap/o
 node <this skill's dir>/scripts/render-map.mjs <project>/.screenmap/out/graph.json   # static HTML fallback
 ```
 
-The `.scrmap` bundle (zip: manifest.json + map.json + screens/) is the primary deliverable — see `docs/scrmap-format.md` in the skill repo. Open it in the **visualiser** (`apps/visualiser` in the skill repo, `npm run dev`, drag the bundle in): interactive graph, flow playback, click-to-copy replay commands. Send the bundle with SendUserFile; send `map.html` too as the no-tooling fallback (display: render). Report: routes captured / total, state variants captured, anything skipped (error screens, auth redirects, un-triggerable sheets), unresolved edges. Offer to publish as an Artifact (if so, load the artifact-design skill first and rebuild the page body-only per Artifact rules — don't publish the full-document HTML as-is). Suggest adding `.screenmap/out/` to `.gitignore`.
+The `.scrmap` bundle (zip: manifest.json + map.json + screens/) is the primary deliverable — see `docs/scrmap-format.md` in the skill repo. Open it in the **map viewer** (`apps/visualiser` in the skill repo, `npm run dev`, drag the bundle in): interactive graph, flow playback, click-to-copy replay commands. Send the bundle with SendUserFile; send `map.html` too as the no-tooling fallback (display: render). Report: routes captured / total, state variants captured, anything skipped (error screens, auth redirects, un-triggerable sheets), unresolved edges. Offer to publish as an Artifact (if so, load the artifact-design skill first and rebuild the page body-only per Artifact rules — don't publish the full-document HTML as-is). Suggest adding `.screenmap/out/` to `.gitignore`.
 
 ## Replay mode — `/screenmap replay <flow-name>`
 
@@ -154,7 +154,7 @@ Run that first (it needs no LLM and reports pass/fail per step). Fall back to ma
 Preview what a change does to the app's navigation surface: which screens were **added,
 removed, or changed**, which edges appeared or vanished, with before/after screenshots.
 The deliverable is a `.diff.scrmap` bundle (format: `docs/diff-scrmap-format.md` in the
-skill repo) — the visualiser renders it with green/amber/red highlights, a Changes
+skill repo) — the map viewer renders it with green/amber/red highlights, a Changes
 panel, and base-vs-head comparison per screen.
 
 Working directory: `<project>/.screenmap/out/diff/<slug>/` where slug is `pr-<number>` or
@@ -255,9 +255,9 @@ node <skill>/scripts/diff-map.mjs pack <diffDir> --device "<device name>"
 
 Restore the original ref. Send the `.diff.scrmap` with SendUserFile; report the diff
 table (added/modified/removed screens, edge changes, state changes, broad-file blind
-spots, anything uncapturable). The bundle opens in the same visualiser as `.scrmap`
+spots, anything uncapturable). The bundle opens in the same map viewer as `.scrmap`
 files (drag it in). If a full `.scrmap` of the app exists, tell the user to load both —
-the visualiser overlays the diff on the full map, so unchanged screens keep their real
+the map viewer overlays the diff on the full map, so unchanged screens keep their real
 screenshots (dimmed) and changed screens flip base⇄head in place (hover for a red
 changed-pixels render).
 

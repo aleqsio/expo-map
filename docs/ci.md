@@ -65,10 +65,10 @@ on one EAS build (queue + build time).
 | Deep-link the rest | deterministic | `xcrun simctl openurl` + screenshot |
 | Explore screens with no flow | agent (budgeted) | writes captures, flows, `notes.json` (per-screen "what changed", `unaffected` verdicts) |
 | `diff-map pack` → `.diff.scrmap` | deterministic | per-state statuses, dismissed suspects |
-| Publish + sticky comment | — | `?map=<baseline-url>&changes=<diff-url>` opens the hosted visualiser preloaded |
+| Publish + sticky comment | — | `?map=<baseline-url>&changes=<diff-url>` opens the hosted map viewer preloaded |
 
 Private repos: raw GitHub URLs aren't anonymously readable, so set `publish: "false"`
-and the comment links the workflow artifact (download, drop into the visualiser).
+and the comment links the workflow artifact (download, drop into the map viewer).
 
 ## Running it locally
 

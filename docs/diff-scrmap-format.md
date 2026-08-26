@@ -112,7 +112,7 @@ Semantics:
 - **Backdrop merge**: viewers MAY overlay a diff on a full `.scrmap` of the same app
   (matched by `app.name`) — unchanged screens then show their real (dimmed)
   screenshots from the full bundle while the diff supplies annotations and
-  base/head captures for the suspect set. The reference visualiser does this
+  base/head captures for the suspect set. The reference map viewer does this
   automatically when both bundles are loaded.
 
 ## Working directory

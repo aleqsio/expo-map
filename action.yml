@@ -4,7 +4,7 @@ name: screenmap
 description: >-
   Map every screen of an Expo / React Native app and review what a pull request changes on-screen.
   PR runs diff the head against a cached baseline map, capture only the affected screens on an iOS
-  simulator, and post a sticky comment linking a preloaded visualiser. Baseline runs refresh the map
+  simulator, and post a sticky comment linking a preloaded map viewer. Baseline runs refresh the map
   of main incrementally and open a flows PR for screens the agent had to explore.
 author: aleqsio
 branding:
@@ -31,10 +31,10 @@ inputs:
     description: Orphan branch that stores baseline maps and per-PR change bundles
     default: screenmaps
   publish:
-    description: "Publish bundles to the screenmaps branch so the comment can deep-link the hosted visualiser (requires contents: write). Set false for private repos if you only want the artifact."
+    description: "Publish bundles to the screenmaps branch so the comment can deep-link the hosted map viewer (requires contents: write). Set false for private repos if you only want the artifact."
     default: "true"
   viewer_url:
-    description: Hosted visualiser origin used in comment links
+    description: Hosted map viewer origin used in comment links
     default: https://app.screenmap.dev
   simulator:
     description: Simulator device name to boot (falls back to any available iPhone)
@@ -63,7 +63,7 @@ outputs:
     description: Path of the run summary JSON
     value: ${{ steps.run.outputs.summary }}
   viewer_link:
-    description: Preloaded visualiser link (when published)
+    description: Preloaded map viewer link (when published)
     value: ${{ steps.publish.outputs.viewer_link }}
 
 runs:
@@ -181,14 +181,6 @@ runs:
         echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
         echo "summary=.screenmap-ci/summary.json" >> "$GITHUB_OUTPUT"
 
-    - name: Render comment image
-      if: inputs.mode == 'pr' && steps.run.outputs.bundle != ''
-      shell: bash
-      run: |
-        screenmap-ci shot --map .screenmap-ci/baseline.scrmap --changes "${{ steps.run.outputs.bundle }}" \
-          --out .screenmap-ci/shot.png --viewer "${{ inputs.viewer_url }}" \
-          || echo "::warning::comment image failed — continuing without it"
-
     - name: Upload diagnostics (failure)
       if: failure()
       uses: actions/upload-artifact@v4
@@ -220,12 +212,17 @@ runs:
         if [ "${{ inputs.mode }}" = "pr" ]; then
           dest="pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}.diff.scrmap"
           files="$bundle=$dest"
-          shot_dest="pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}.png"
-          [ -f .screenmap-ci/shot.png ] && files="$files,.screenmap-ci/shot.png=$shot_dest"
+          # the captures themselves, so the comment can show the screens rather
+          # than describe them; paths mirror the summary's `shots` entries
+          shots_dir="pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}"
+          diff_dir="${{ inputs.project }}/.screenmap/out/ci/pr/diff"
+          for side in head base; do
+            [ -d "$diff_dir/$side/screens" ] && files="$files,$diff_dir/$side/screens=$shots_dir/$side/screens"
+          done
           out=$(screenmap-ci publish --repo "${{ github.repository }}" --branch "${{ inputs.screenmaps_branch }}" --files "$files" --message "pr #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}")
           changes_url=$(echo "$out" | python3 -c "import json,sys;print(json.load(sys.stdin)['urls']['$dest'])")
-          shot_url=$(echo "$out" | python3 -c "import json,sys;print(json.load(sys.stdin)['urls'].get('$shot_dest',''))")
-          echo "shot_url=$shot_url" >> "$GITHUB_OUTPUT"
+          shots_base=$(echo "$out" | python3 -c "import json,sys;print(json.load(sys.stdin)['base'])")/$shots_dir
+          echo "shots_base=$shots_base" >> "$GITHUB_OUTPUT"
           # the baseline this diff was computed against, so the viewer gets the backdrop
           base_sha="${{ github.event.pull_request.base.sha }}"
           map_url="https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse origin/${{ inputs.screenmaps_branch }})/main/${base_sha:0:7}.scrmap"
@@ -249,7 +246,7 @@ runs:
           --viewer "${{ inputs.viewer_url }}" --artifact-url "$artifact_url" \
           $( [ -n "${{ steps.publish.outputs.map_url }}" ] && echo --map-url "${{ steps.publish.outputs.map_url }}" ) \
           $( [ -n "${{ steps.publish.outputs.changes_url }}" ] && echo --changes-url "${{ steps.publish.outputs.changes_url }}" ) \
-          $( [ -n "${{ steps.publish.outputs.shot_url }}" ] && echo --shot-url "${{ steps.publish.outputs.shot_url }}" )
+          $( [ -n "${{ steps.publish.outputs.shots_base }}" ] && echo --shots-base "${{ steps.publish.outputs.shots_base }}" )
 
     - name: Open flows PR
       if: inputs.mode == 'baseline' && inputs.flows_pr == 'true' && steps.run.outputs.bundle != ''

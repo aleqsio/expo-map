@@ -5,7 +5,7 @@
 //                      [--only id,id] [--limit N] [--no-agent] [--no-sim]
 //   screenmap-ci pr       --project <dir> --baseline <file.scrmap> [--base <sha>] [--head <sha>]
 //                      [--pr <n> --title <t> --url <u>] [--out <file>] [--no-agent]
-//   screenmap-ci comment  --summary <pr-summary.json> [--map-url U] [--changes-url U] [--artifact-url U]
+//   screenmap-ci comment  --summary <pr-summary.json> [--map-url U] [--changes-url U] [--artifact-url U] [--shots-base U]
 //                      [--post --repo owner/name --pr <n>]
 //   screenmap-ci publish  --repo owner/name [--branch screenmaps] --files src=dest[,src=dest…] --message "…"
 //   screenmap-ci flows-pr --repo owner/name --flows <dir> [--base main] --title "…" [--body "…"]
@@ -243,44 +243,174 @@ async function pr() {
     suspects: { added: suspects.capture.filter((c) => c.status === 'A').length, modified: suspects.capture.filter((c) => c.status === 'M').length, removed: suspects.capture.filter((c) => c.status === 'D').length, broadFiles: suspects.broadFiles },
     captured: { replay: cap.replay.length, deeplink: cap.deeplink.length, agent: cap.agent.length, failed: cap.failed },
     agent: cap.agentRun ?? { ran: false }, recordedFlowsDir: cap.recordedFlowsDir ?? null, drifted: cap.drifted ?? [],
-    diff: { nodes: diff.nodes, dismissed: diff.dismissed ?? [], edges: diff.edges, states: (diff.states ?? []).filter((s) => s.reason !== 'hint' && ['A', 'M', 'D'].includes(s.status) && s.name !== '') },
+    diff: { nodes: diff.nodes, dismissed: diff.dismissed ?? [], edges: diff.edges, states: (diff.states ?? []).filter((s) => s.reason !== 'hint') },
     routes: Object.fromEntries(headGraph.routes.map((r) => [r.id, r.urlPath])),
+    shots: collectShots(diffDir, [...headGraph.routes, ...base.graph.routes], [...diff.nodes.map((d) => d.id), ...(diff.dismissed ?? []).map((d) => d.id)]),
   }
   writeJson(path.join(work, 'summary.json'), summary)
   console.log(JSON.stringify(summary, null, 2))
 }
 
-function renderComment(s, { mapUrl, changesUrl, artifactUrl, shotUrl, viewer = 'https://app.screenmap.dev' }) {
+// Bundle-relative paths of every capture the comment might want to show:
+// per node, the bare screen on each side plus one entry per named state. Only
+// files that actually exist are listed, so the renderer can just check.
+function collectShots(diffDir, routes, ids) {
+  const slugOf = new Map(routes.map((r) => [r.id, r.slug]))
+  const out = {}
+  for (const id of new Set(ids)) {
+    const slug = slugOf.get(id)
+    if (!slug) continue
+    const entry = { states: {} }
+    for (const side of ['head', 'base']) {
+      const dir = path.join(diffDir, side, 'screens')
+      if (!exists(dir)) continue
+      for (const f of fs.readdirSync(dir)) {
+        const stem = f.replace(/\.\w+$/, '')
+        if (stem === slug) entry[side] = `${side}/screens/${f}`
+        else if (stem.startsWith(slug + '--')) {
+          const name = stem.slice(slug.length + 2)
+          ;(entry.states[name] ??= {})[side] = `${side}/screens/${f}`
+        }
+      }
+    }
+    if (entry.head || entry.base || Object.keys(entry.states).length) out[id] = entry
+  }
+  return out
+}
+
+// The PR comment. GitHub gives us tables, <img>, <details> and task lists —
+// and strips every style attribute — so the layout is a table and anything that
+// wants to look like screenmap has to arrive as a picture.
+const MARK = { A: '🟩', M: '🟨', D: '🟥', U: '⬜' }
+const TAG = { A: 'new', M: 'changed', D: 'removed' }
+const WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten']
+const STRIP_MAX = 6
+const CONTEXT_MAX = 2 // cleared suspects that ride along in the strip for context
+const SHOT_W = 190 // px; the strip is the headline, so the screens carry it
+// Without an agent in the loop there is no written note, so the raw reason has
+// to carry the row. Say it the way a reviewer would.
+const REASON = {
+  'route-added': 'new route on this branch',
+  'route-removed': 'route gone from this branch',
+  'file-touched': 'its own source changed',
+  'import-touched': 'something it imports changed',
+}
+const why = (d) => d.note ?? [REASON[d.reason] ?? d.reason, d.via?.length ? `(${d.via.slice(0, 2).map((f) => f.split('/').pop()).join(', ')}${d.via.length > 2 ? ', …' : ''})` : ''].filter(Boolean).join(' ')
+const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const say = (n) => WORDS[n] ?? String(n)
+
+// A sentence about this pull request, not a changelog for the tool.
+function headline({ A, M, D }) {
+  const total = A.length + M.length + D.length
+  if (!total) return 'No screen is affected by this pull request'
+  const noun = total === 1 ? 'screen' : 'screens'
+  if (A.length && !M.length && !D.length) return `${say(A.length)} new ${noun} in this pull request`
+  if (D.length && !A.length && !M.length) return `${say(D.length)} ${noun} removed in this pull request`
+  return `${say(total)} ${noun} changed in this pull request`
+}
+
+function renderComment(s, { mapUrl, changesUrl, artifactUrl, shotUrl, shotsBase, viewer = 'https://app.screenmap.dev' }) {
   const n = s.diff.nodes
   const A = n.filter((x) => x.status === 'A'), M = n.filter((x) => x.status === 'M'), D = n.filter((x) => x.status === 'D')
-  const eA = s.diff.edges.filter((e) => e.status === 'A').length, eD = s.diff.edges.filter((e) => e.status === 'D').length
+  const dismissed = s.diff.dismissed ?? []
   const route = (id) => s.routes[id] ?? id
-  const lines = []
-  const parts = [`${A.length} screen${A.length === 1 ? '' : 's'} added`, `${M.length} changed`, `${D.length} removed`]
-  if (eA || eD) parts.push(`${eA + eD} edge${eA + eD === 1 ? '' : 's'} ${eA && eD ? 'changed' : eA ? 'added' : 'removed'}`)
-  if (s.diff.dismissed.length) parts.push(`${s.diff.dismissed.length} suspect${s.diff.dismissed.length === 1 ? '' : 's'} dismissed`)
-  lines.push(`### 🗺 screenmap · ${parts.join(' · ')}`)
-  lines.push('')
-  if (!n.length) lines.push('_No screen is affected by this change as far as static analysis can tell._')
-  const link = mapUrl || changesUrl ? `${viewer}/?${[mapUrl && `map=${encodeURIComponent(mapUrl)}`, changesUrl && `changes=${encodeURIComponent(changesUrl)}`].filter(Boolean).join('&')}` : null
-  if (link) lines.push(`**[Open in visualiser →](${link})**`, '')
-  // the changed region, rendered by the visualiser in shot mode; clicks through
-  if (shotUrl) lines.push(link ? `[![changed screens](${shotUrl})](${link})` : `![changed screens](${shotUrl})`, '')
-  const mark = { A: '➕', M: '✏️', D: '➖' }
-  for (const d of [...A, ...M, ...D]) {
-    const states = s.diff.states.filter((st) => st.node === d.id)
-    const stateNote = states.length ? ` — states: ${states.map((st) => `\`${st.name}\` ${st.status === 'A' ? 'added' : st.status === 'D' ? 'removed' : 'changed'}`).join(', ')}` : ''
-    lines.push(`- ${mark[d.status]} \`${route(d.id)}\`${d.note ? ` — ${d.note}` : ''}${stateNote}`)
+  const states = (id) => (s.diff.states ?? []).filter((x) => x.node === id)
+  const bareState = (id) => states(id).find((x) => x.name === '')
+  const movedStates = (id) => states(id).filter((x) => x.name !== '' && ['A', 'M', 'D'].includes(x.status))
+
+  const link = mapUrl || changesUrl
+    ? `${viewer}/?${[mapUrl && `map=${encodeURIComponent(mapUrl)}`, changesUrl && `changes=${encodeURIComponent(changesUrl)}`].filter(Boolean).join('&')}`
+    : null
+  const nodeLink = (id) => (link ? `${link}&node=${encodeURIComponent(id)}` : null)
+  const url = (rel) => (shotsBase && rel ? shotsBase.replace(/\/$/, '') + '/' + rel : null)
+
+  // Which capture speaks for this screen. A screen whose bare capture is
+  // identical but whose bottom sheet moved must show the sheet — otherwise the
+  // strip is a row of pictures that all look unchanged.
+  const capture = (id, status) => {
+    const sh = s.shots?.[id]
+    if (!sh) return null
+    const side = status === 'D' ? 'base' : 'head'
+    if (bareState(id)?.status === 'unchanged') {
+      const moved = movedStates(id)[0]
+      const rel = moved && sh.states?.[moved.name]?.[side]
+      if (rel) return { rel, state: moved.name, note: moved.note ?? null }
+    }
+    return sh[side] ? { rel: sh[side], state: null, note: null } : null
   }
-  if (s.diff.dismissed.length) {
-    lines.push('', '<details><summary>Dismissed suspects (statically flagged, judged visually unaffected)</summary>', '')
-    for (const d of s.diff.dismissed) lines.push(`- \`${route(d.id)}\`${d.note ? ` — ${d.note}` : ''}`)
+
+  const entries = [
+    ...[...A, ...M, ...D].map((d) => ({ id: d.id, status: d.status, note: why(d) })),
+    ...dismissed.map((d) => ({ id: d.id, status: 'U', note: why(d) })),
+  ].map((e) => {
+    const cap = capture(e.id, e.status)
+    return { ...e, cap, note: cap?.note ?? e.note, tag: cap?.state ? `${cap.state} state` : (TAG[e.status] ?? 'unaffected') }
+  })
+
+  const lines = [`### ${headline({ A, M, D })}`, '']
+
+  // the strip: the screens themselves, one cell each, captioned by route
+  const withShot = entries.filter((e) => url(e.cap?.rel))
+  const changedShots = withShot.filter((e) => e.status !== 'U')
+  const shown = [...changedShots, ...withShot.filter((e) => e.status === 'U').slice(0, Math.max(0, Math.min(CONTEXT_MAX, STRIP_MAX - changedShots.length)))].slice(0, STRIP_MAX)
+  if (shown.length) {
+    const cells = shown.map((e) => {
+      const img = `<img src="${url(e.cap.rel)}" width="${SHOT_W}" alt="${esc(route(e.id))}">`
+      const href = nodeLink(e.id)
+      return `<td align="center" valign="top">${href ? `<a href="${href}">${img}</a>` : img}<br><code>${esc(route(e.id))}</code><br><sub>${MARK[e.status]} ${esc(e.tag)}</sub></td>`
+    })
+    lines.push('<table><tr>', ...cells, '</tr></table>', '')
+    if (entries.length > shown.length) lines.push(`<sub>${entries.length - shown.length} more in the list below.</sub>`, '')
+  } else if (shotUrl) {
+    lines.push(link ? `[![changed screens](${shotUrl})](${link})` : `![changed screens](${shotUrl})`, '')
+  }
+
+  // the ledger: route on the left, what changed on it on the right
+  if (entries.length) {
+    lines.push('<table>')
+    for (const e of entries) {
+      const name = `<code>${esc(route(e.id))}</code>${e.cap?.state ? ` <sub>· ${esc(e.cap.state)}</sub>` : ''}`
+      const href = nodeLink(e.id)
+      lines.push(`<tr><td>${MARK[e.status]} ${href ? `<a href="${href}">${name}</a>` : name}</td><td>${e.note ? esc(e.note) : ''}</td></tr>`)
+    }
+    lines.push('</table>', '')
+  } else {
+    lines.push('_Static analysis reaches no screen from the files this pull request touches._', '')
+  }
+
+  if (link) lines.push(`**[Open screenmap viewer for this PR →](${link})**`, '')
+
+  const pairs = entries.filter((e) => e.status === 'M' && url(s.shots?.[e.id]?.base) && e.cap && url(e.cap.rel))
+    .map((e) => {
+      const sh = s.shots[e.id]
+      const before = e.cap.state ? sh.states?.[e.cap.state]?.base : sh.base
+      return before ? { ...e, before } : null
+    }).filter(Boolean)
+  if (pairs.length) {
+    lines.push('<details><summary>Before and after</summary>', '', '<table>', '<tr><td></td><td align="center"><sub>before</sub></td><td align="center"><sub>after</sub></td></tr>')
+    for (const e of pairs) {
+      lines.push(`<tr><td valign="middle"><code>${esc(route(e.id))}</code>${e.cap.state ? `<br><sub>· ${esc(e.cap.state)}</sub>` : ''}</td><td><img src="${url(e.before)}" width="${SHOT_W}" alt="${esc(route(e.id))} before"></td><td><img src="${url(e.cap.rel)}" width="${SHOT_W}" alt="${esc(route(e.id))} after"></td></tr>`)
+    }
+    lines.push('</table>', '', '</details>')
+  }
+
+  const eA = s.diff.edges.filter((e) => e.status === 'A'), eD = s.diff.edges.filter((e) => e.status === 'D')
+  if (eA.length || eD.length) {
+    lines.push('<details><summary>' + [eA.length && `${eA.length} new route${eA.length === 1 ? '' : 's'}`, eD.length && `${eD.length} route${eD.length === 1 ? '' : 's'} gone`].filter(Boolean).join(' · ') + '</summary>', '')
+    for (const e of [...eA, ...eD]) lines.push(`- ${MARK[e.status]} \`${route(e.from)}\` → \`${route(e.to)}\`${e.raw && e.raw !== route(e.to) ? ` — \`${e.raw}\`` : ''}`)
     lines.push('', '</details>')
   }
-  const foot = []
-  if (artifactUrl) foot.push(`[artifact](${artifactUrl})`)
-  if (s.baselineGeneratedAt) foot.push(`baseline \`${(s.baseSha ?? '').slice(0, 7)}\` (${new Date(s.baselineGeneratedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC)`)
-  // who did the capturing: device, replay runner, and the agent's LLM setup
+
+  // things that went wrong get to be seen, not buried in the footnote
+  const warn = []
+  if (s.captured.failed?.length) warn.push(`${s.captured.failed.length} screen${s.captured.failed.length === 1 ? '' : 's'} could not be captured — deep link failed in CI.`)
+  if (s.agent?.ran && s.agent.overBudget?.length) warn.push(`${s.agent.overBudget.length} screen${s.agent.overBudget.length === 1 ? '' : 's'} hit the agent budget before reaching a stable state.`)
+  if (s.drifted?.length) warn.push(`${s.drifted.length} committed flow${s.drifted.length === 1 ? '' : 's'} drifted (${s.drifted.map((d) => d.flows[0]).join(', ')}) — captured by deep link instead, and queued to be re-recorded.`)
+  if (warn.length) lines.push('', '> [!WARNING]', ...warn.map((w) => `> ${w}`))
+
+  if (s.recordedFlowsDir) lines.push('', '> [!NOTE]', '> New flows were recorded for screens that had none. A flows PR will follow after merge.')
+
+  // provenance: worth keeping, not worth reading first
   const a = s.agent ?? {}
   let agentDesc = 'off'
   if (a.provider) {
@@ -288,18 +418,21 @@ function renderComment(s, { mapUrl, changesUrl, artifactUrl, shotUrl, viewer = '
     if (a.keyEnv) agentDesc += a.hasKey ? ` · ${a.keyEnv}` : ` · ${a.keyEnv} not set`
     else if (a.keyEnv === null && a.hasKey === null) agentDesc += ' · no LLM key configured'
   }
-  foot.push(`captured on ${s.device ?? 'simulator'}: ${s.captured.replay} by flow replay${s.argent ? ` (argent ${s.argent})` : ''}, ${s.captured.deeplink} by deep link (simctl), ${s.captured.agent} by agent (${agentDesc})`)
-  if (s.agent?.ran && s.agent.overBudget?.length) foot.push(`${s.agent.overBudget.length} screen(s) over the agent budget`)
-  if (s.recordedFlowsDir) foot.push('new flows recorded — a flows PR will follow after merge')
-  if (s.drifted?.length) foot.push(`${s.drifted.length} committed flow(s) drifted (${s.drifted.map((d) => d.flows[0]).join(', ')}) — captured by deep link instead; will be re-recorded`)
-  if (s.suspects.broadFiles?.length) foot.push(`${s.suspects.broadFiles.length} broadly-imported changed file(s) excluded from suspect marking`)
-  lines.push('', `<sub>${foot.join(' · ')}</sub>`)
+  const foot = [
+    `Captured on ${s.device ?? 'simulator'}: ${s.captured.replay} by flow replay${s.argent ? ` (argent ${s.argent})` : ''}, ${s.captured.deeplink} by deep link, ${s.captured.agent} by agent (${agentDesc}).`,
+    s.baselineGeneratedAt ? `Compared against baseline \`${(s.baseSha ?? '').slice(0, 7)}\` from ${new Date(s.baselineGeneratedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC.` : null,
+    `${A.length} added · ${M.length} changed · ${D.length} removed · ${dismissed.length} suspect${dismissed.length === 1 ? '' : 's'} cleared by looking.`,
+    s.suspects.broadFiles?.length ? `${s.suspects.broadFiles.length} broadly-imported changed file${s.suspects.broadFiles.length === 1 ? '' : 's'} excluded from suspect marking.` : null,
+    artifactUrl ? `[Download the bundle](${artifactUrl}).` : null,
+  ].filter(Boolean)
+  lines.push('', '<details><summary>How these were captured</summary>', '', ...foot.map((f) => `- ${f}`), '', '</details>')
+
   return lines.join('\n')
 }
 
 async function comment() {
   const s = readJson(opts.summary)
-  const body = renderComment(s, { mapUrl: opts['map-url'], changesUrl: opts['changes-url'], artifactUrl: opts['artifact-url'], shotUrl: opts['shot-url'], viewer: opts.viewer })
+  const body = renderComment(s, { mapUrl: opts['map-url'], changesUrl: opts['changes-url'], artifactUrl: opts['artifact-url'], shotUrl: opts['shot-url'], shotsBase: opts['shots-base'], viewer: opts.viewer })
   if (opts.post) {
     const repo = opts.repo ?? repoSlug()
     const number = Number(opts.pr ?? s.pr)
@@ -310,7 +443,14 @@ async function comment() {
 
 async function publish() {
   const repo = opts.repo ?? repoSlug()
-  const files = String(opts.files).split(',').map((p) => { const [src, dest] = p.split('='); return { src, dest } })
+  // a src that is a directory publishes every file under it, keeping the tree
+  const files = String(opts.files).split(',').flatMap((pair) => {
+    const [src, dest] = pair.split('=')
+    if (!exists(src) || !fs.statSync(src).isDirectory()) return [{ src, dest }]
+    const walk = (dir, rel = '') => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(path.join(dir, e.name), `${rel}${e.name}/`) : [{ src: path.join(dir, e.name), dest: `${dest}/${rel}${e.name}` }])
+    return walk(src)
+  })
   const res = publishToBranch({ repo, branch: opts.branch ?? 'screenmaps', files, message: opts.message ?? 'screenmap-ci: publish bundles', cwd: path.resolve(opts.cwd ?? '.') })
   console.log(JSON.stringify(res, null, 2))
 }
