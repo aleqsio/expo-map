@@ -24,8 +24,8 @@ A Claude Code skill that produces a **visual navigation map of an Expo / React N
 ## Install the skill
 
 ```bash
-git clone https://github.com/aleqsio/expo-map
-ln -s "$(pwd)/expo-map/skills/expo-map" ~/.claude/skills/expo-map
+git clone https://github.com/aleqsio/screenmap
+ln -s "$PWD/screenmap/skills/expo-map" ~/.claude/skills/expo-map
 ```
 
 Then in any Expo/RN project, in Claude Code:
