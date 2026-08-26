@@ -1,12 +1,17 @@
 import { cn } from '@/lib/utils'
 
-// The mark: a tiny atlas — three stacked screens with a route between them.
+// The mark: two screens with a route between them. Same geometry as the
+// favicon in public/, drawn in currentColor and without the black tile, which
+// the favicon only needs to hold its own against browser chrome. Keep the two
+// in step: the coordinates below are the favicon's, cropped to the glyph.
 export function Mark({ className }) {
   return (
-    <svg viewBox="0 0 24 24" className={cn('size-5', className)} aria-hidden="true">
-      <rect x="3" y="3" width="7" height="11" rx="2" fill="currentColor" opacity="0.9" />
-      <rect x="14" y="10" width="7" height="11" rx="2" fill="currentColor" opacity="0.55" />
-      <path d="M10 8.5 C 13 8.5, 12 15.5, 14 15.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <svg viewBox="4 4 24 24" className={cn('size-5', className)} aria-hidden="true">
+      <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+        <rect x="6" y="5" width="9" height="11" rx="1.5" />
+        <rect x="18" y="16" width="9" height="11" rx="1.5" />
+        <path d="M15 10.5h4a2 2 0 0 1 2 2V16" />
+      </g>
     </svg>
   )
 }
