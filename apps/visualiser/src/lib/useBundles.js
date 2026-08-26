@@ -63,16 +63,27 @@ export function useBundles() {
     setGen((g) => g + 1)
   }, [])
 
+  // The same pair and the same landing view as ?template=bluesky, so the button
+  // and the link hand you an identical viewer. The diff is optional: if only
+  // the map is deployed, you still get the map rather than an error.
   const loadDemo = useCallback(async () => {
     setBusy(true)
     try {
-      place(await fetchBundle('/demo.scrmap'))
+      const [map, diff] = await Promise.all([
+        fetchBundle(TEMPLATES.bluesky.map),
+        fetchBundle(TEMPLATES.bluesky.changes).catch(() => null),
+      ])
+      setPlain(map)
+      if (diff?.diff) setChanges(diff)
+      setMode('map')
+      setGen((g) => g + 1)
+      setError(null)
     } catch (e) {
       setError(String(e.message ?? e))
     } finally {
       setBusy(false)
     }
-  }, [place])
+  }, [])
 
   // initial sources
   useEffect(() => {
