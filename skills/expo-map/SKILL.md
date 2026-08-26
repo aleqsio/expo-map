@@ -1,6 +1,6 @@
 ---
 name: expo-map
-description: Generate a visual navigation map of an Expo app. Statically parses expo-router routes and links for full coverage, then deep-links through every screen in the iOS simulator capturing screenshots — including runtime states like bottom sheet snap points and modals — and renders a self-contained HTML map. Also diffs two revisions into a PR preview (.appmapdiff) showing which screens/edges were added, removed, or changed. Use when the user asks to map an Expo/React Native app's navigation, screens, or routes, wants a visual sitemap of their app, or wants to preview/review what a PR changes on-screen.
+description: Generate a visual navigation map of an Expo app. Statically parses expo-router routes and links for full coverage, then deep-links through every screen in the iOS simulator capturing screenshots — including runtime states like bottom sheet snap points and modals — and renders a self-contained HTML map. Also diffs two revisions into a PR preview (.diff.scrmap) showing which screens/edges were added, removed, or changed. Use when the user asks to map an Expo/React Native app's navigation, screens, or routes, wants a visual sitemap of their app, or wants to preview/review what a PR changes on-screen.
 ---
 
 # expo-map
@@ -13,7 +13,7 @@ Produce a visual map of an Expo app's navigation: every expo-router route as a c
 
 ## Flow recording (do this throughout Phases 4–5)
 
-Every interaction sequence you perform is recorded as a **replayable flow**, written at the moment you perform it — not reconstructed afterwards. Flows use the **argent flow format** (argent.swmansion.com — Software Mansion's agentic mobile toolkit): a `<name>.yaml` argent flow plus a `<name>.meta.json` cartography sidecar, both in `<project>/.expo-map/flows/`. Anyone replays a flow headlessly, no LLM in the loop: `npx @swmansion/argent flow run .expo-map/flows/<name>.yaml`. Full pair schema: `docs/appmap-format.md` in the skill repo.
+Every interaction sequence you perform is recorded as a **replayable flow**, written at the moment you perform it — not reconstructed afterwards. Flows use the **argent flow format** (argent.swmansion.com — Software Mansion's agentic mobile toolkit): a `<name>.yaml` argent flow plus a `<name>.meta.json` cartography sidecar, both in `<project>/.expo-map/flows/`. Anyone replays a flow headlessly, no LLM in the loop: `npx @swmansion/argent flow run .expo-map/flows/<name>.yaml`. Full pair schema: `docs/scrmap-format.md` in the skill repo.
 
 ```yaml
 # Open item details and expand the sheet to 50%
@@ -133,11 +133,11 @@ These flows are what make edges *pinnable*: a nav flow tapping through a transit
 
 ```bash
 for f in <project>/.expo-map/screens/*.png; do sips -Z 800 "$f" >/dev/null; done   # downscale
-node <this skill's dir>/scripts/pack-map.mjs <project>        # → .expo-map/<app>-<date>.appmap bundle
+node <this skill's dir>/scripts/pack-map.mjs <project>        # → .expo-map/<app>-<date>.scrmap bundle
 node <this skill's dir>/scripts/render-map.mjs <project>/.expo-map/graph.json   # static HTML fallback
 ```
 
-The `.appmap` bundle (zip: manifest.json + map.json + screens/) is the primary deliverable — see `docs/appmap-format.md` in the skill repo. Open it in the **visualiser** (`apps/visualiser` in the skill repo, `npm run dev`, drag the bundle in): interactive graph, flow playback, click-to-copy replay commands. Send the bundle with SendUserFile; send `map.html` too as the no-tooling fallback (display: render). Report: routes captured / total, state variants captured, anything skipped (error screens, auth redirects, un-triggerable sheets), unresolved edges. Offer to publish as an Artifact (if so, load the artifact-design skill first and rebuild the page body-only per Artifact rules — don't publish the full-document HTML as-is). Suggest adding `.expo-map/` to `.gitignore`.
+The `.scrmap` bundle (zip: manifest.json + map.json + screens/) is the primary deliverable — see `docs/scrmap-format.md` in the skill repo. Open it in the **visualiser** (`apps/visualiser` in the skill repo, `npm run dev`, drag the bundle in): interactive graph, flow playback, click-to-copy replay commands. Send the bundle with SendUserFile; send `map.html` too as the no-tooling fallback (display: render). Report: routes captured / total, state variants captured, anything skipped (error screens, auth redirects, un-triggerable sheets), unresolved edges. Offer to publish as an Artifact (if so, load the artifact-design skill first and rebuild the page body-only per Artifact rules — don't publish the full-document HTML as-is). Suggest adding `.expo-map/` to `.gitignore`.
 
 ## Replay mode — `/expo-map replay <flow-name>`
 
@@ -153,7 +153,7 @@ Run that first (it needs no LLM and reports pass/fail per step). Fall back to ma
 
 Preview what a change does to the app's navigation surface: which screens were **added,
 removed, or changed**, which edges appeared or vanished, with before/after screenshots.
-The deliverable is an `.appmapdiff` bundle (format: `docs/appmapdiff-format.md` in the
+The deliverable is a `.diff.scrmap` bundle (format: `docs/diff-scrmap-format.md` in the
 skill repo) — the visualiser renders it with green/amber/red highlights, a Changes
 panel, and base-vs-head comparison per screen.
 
@@ -253,10 +253,10 @@ for f in <diffDir>/{base,head}/screens/*.png; do sips -Z 800 "$f" >/dev/null; do
 node <skill>/scripts/diff-map.mjs pack <diffDir> --device "<device name>"
 ```
 
-Restore the original ref. Send the `.appmapdiff` with SendUserFile; report the diff
+Restore the original ref. Send the `.diff.scrmap` with SendUserFile; report the diff
 table (added/modified/removed screens, edge changes, state changes, broad-file blind
-spots, anything uncapturable). The bundle opens in the same visualiser as `.appmap`
-files (drag it in). If a full `.appmap` of the app exists, tell the user to load both —
+spots, anything uncapturable). The bundle opens in the same visualiser as `.scrmap`
+files (drag it in). If a full `.scrmap` of the app exists, tell the user to load both —
 the visualiser overlays the diff on the full map, so unchanged screens keep their real
 screenshots (dimmed) and changed screens flip base⇄head in place (hover for a red
 changed-pixels render).

@@ -15,7 +15,7 @@ export function Wordmark({ className }) {
   return (
     <span className={cn('inline-flex items-center gap-2 text-primary', className)}>
       <Mark />
-      <span className="font-heading text-[15px] font-bold tracking-[-0.03em] text-foreground">appmap</span>
+      <span className="font-heading text-[15px] font-bold tracking-[-0.03em] text-foreground">screenmap</span>
     </span>
   )
 }

@@ -1,11 +1,11 @@
 {
-  "name": "appmap-ci",
+  "name": "screenmap-ci",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Deterministic core of the appmap GitHub Action: baseline refresh, PR diff, publish, comment.",
+  "description": "Deterministic core of the screenmap GitHub Action: baseline refresh, PR diff, publish, comment.",
   "bin": {
-    "appmap-ci": "./appmap-ci.mjs"
+    "screenmap-ci": "./screenmap-ci.mjs"
   },
   "dependencies": {
     "puppeteer-core": "^25.9.0",

@@ -1,11 +1,11 @@
 import { unzipSync } from 'fflate'
 import { parse as parseYaml } from 'yaml'
 
-// Parses a .appmap zip (ArrayBuffer) into { manifest, map, images: Map<path, objectURL> }.
+// Parses a .scrmap zip (ArrayBuffer) into { manifest, map, images: Map<path, objectURL> }.
 // v1 bundles inline JSON flows in map.json; v2 bundles ship argent flow YAML
 // (flows/*.yaml, runnable via `argent flow run`) plus .meta.json sidecars —
 // both load into the same internal flow shape.
-// .appmapdiff bundles (manifest.kind === "diff") load into the same shape plus
+// .diff.scrmap bundles (manifest.kind === "diff") load into the same shape plus
 // a `diff` field; base/head sides are merged into one graph with per-node and
 // per-edge diff annotations.
 export async function loadBundle(buffer) {
@@ -46,7 +46,7 @@ export async function loadBundle(buffer) {
   return { manifest, map, images }
 }
 
-// .appmapdiff → the internal bundle shape. Head is the primary graph; base-only
+// .diff.scrmap → the internal bundle shape. Head is the primary graph; base-only
 // (removed) nodes and edges are merged in so the map shows what disappeared.
 // Screenshot paths get side-prefixed keys ("head/screens/…") into `images`.
 function loadDiffBundle(files, manifest, text) {
@@ -110,7 +110,7 @@ function loadDiffBundle(files, manifest, text) {
   return { manifest, map: { nodes, edges, flows: [] }, images, diff }
 }
 
-// Overlay a diff bundle on a full .appmap of the same app: every node keeps its
+// Overlay a diff bundle on a full .scrmap of the same app: every node keeps its
 // diff annotation, but nodes the diff didn't capture (unchanged screens) borrow
 // their screenshot and state variants from the plain bundle. Image keys don't
 // collide — plain uses "screens/…", diff uses "base|head/screens/…".

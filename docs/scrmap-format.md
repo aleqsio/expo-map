@@ -1,6 +1,6 @@
-# .appmap bundle format (v2)
+# .scrmap bundle format (v2)
 
-A `.appmap` file is a plain **zip** containing everything needed to render an application's
+A `.scrmap` file is a plain **zip** containing everything needed to render an application's
 navigation map: the graph, screenshots, capture verdicts, and replayable flows.
 It is the *interchange* format — the expo-map skill's working directory
 (`.expo-map/` with `graph.json`, `capture-status.json`, `flows/`, `screens/`) is the
@@ -16,7 +16,7 @@ carries the cartography argent doesn't model: route ids, per-step screen hops,
 capture files, and human target labels.
 
 ```
-myapp-2026-08-08.appmap        (zip)
+myapp-2026-08-08.scrmap        (zip)
 ├── manifest.json              # formatVersion: 2, flowFormat: "argent"
 ├── map.json
 ├── screens/*.png              # slug-named; state variants as <slug>--<state>.png

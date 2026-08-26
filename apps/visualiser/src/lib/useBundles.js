@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadBundle, mergeBundles } from './loadBundle'
 
-// A viewer session holds up to two bundles: the Map (a plain .appmap) and the
-// Changes overlay (an .appmapdiff). When both describe the same app, Changes
+// A viewer session holds up to two bundles: the Map (a plain .scrmap) and the
+// Changes overlay (a .diff.scrmap). When both describe the same app, Changes
 // mode renders the overlay on top of the map's real captures.
 //
 // Sources, in priority order: ?map= / ?changes= URL params (CORS-fetched, for
@@ -59,7 +59,7 @@ export function useBundles() {
   const loadDemo = useCallback(async () => {
     setBusy(true)
     try {
-      place(await fetchBundle('/demo.appmap'))
+      place(await fetchBundle('/demo.scrmap'))
     } catch (e) {
       setError(String(e.message ?? e))
     } finally {
@@ -75,13 +75,13 @@ export function useBundles() {
     const onDiffsRoute = /^\/diffs\/?$/.test(window.location.pathname)
     ;(async () => {
       try {
-        const head = await fetch('/demo.appmap', { method: 'HEAD' })
+        const head = await fetch('/demo.scrmap', { method: 'HEAD' })
         const type = head.headers.get('content-type') ?? ''
         const size = parseInt(head.headers.get('content-length') ?? '0', 10)
         const ok = head.ok && !type.includes('text/html') && (size > 10000 || /zip|octet-stream/.test(type))
         setDemoAvailable(ok)
         if (ok && !mapUrl) {
-          const demo = await fetchBundle('/demo.appmap')
+          const demo = await fetchBundle('/demo.scrmap')
           setPlain((cur) => cur ?? demo) // never clobber a user-opened bundle
         }
       } catch {}
@@ -97,7 +97,7 @@ export function useBundles() {
           setBusy(false)
         }
       }
-      const diffUrl = changesUrl ?? (onDiffsRoute ? '/demo.appmapdiff' : null)
+      const diffUrl = changesUrl ?? (onDiffsRoute ? '/demo.diff.scrmap' : null)
       if (diffUrl) {
         try {
           const b = await fetchBundle(diffUrl)

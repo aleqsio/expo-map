@@ -8,7 +8,7 @@ export function RowMark({ kind }) {
     A: ['+', 'bg-added/15 text-added'],
     M: ['±', 'bg-changed/15 text-changed'],
     D: ['−', 'bg-removed/15 text-removed'],
-    flow: ['✦', 'bg-primary/12 text-primary'],
+    flow: ['✦', 'bg-secondary text-primary'],
   }
   const [glyph, cls] = map[kind] ?? ['·', 'bg-muted text-muted-foreground']
   return (
@@ -47,7 +47,7 @@ export default function SidePanel({ title, count, open, onToggle, items, footer 
                 className={cn(
                   'flex min-h-[34px] w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] transition-[background-color,scale] duration-150 active:scale-[0.98]',
                   'hover:bg-muted/70',
-                  it.active && 'bg-primary/12 text-foreground ring-1 ring-primary/30'
+                  it.active && 'bg-foreground text-background'
                 )}
               >
                 <RowMark kind={it.kind} />

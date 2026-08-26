@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// appmap-ci — the deterministic core of the appmap GitHub Action.
+// screenmap-ci — the deterministic core of the screenmap GitHub Action.
 //
-//   appmap-ci baseline --project <dir> [--previous <file.appmap>] [--full] [--out <file>]
+//   screenmap-ci baseline --project <dir> [--previous <file.scrmap>] [--full] [--out <file>]
 //                      [--only id,id] [--limit N] [--no-agent] [--no-sim]
-//   appmap-ci pr       --project <dir> --baseline <file.appmap> [--base <sha>] [--head <sha>]
+//   screenmap-ci pr       --project <dir> --baseline <file.scrmap> [--base <sha>] [--head <sha>]
 //                      [--pr <n> --title <t> --url <u>] [--out <file>] [--no-agent]
-//   appmap-ci comment  --summary <pr-summary.json> [--map-url U] [--changes-url U] [--artifact-url U]
+//   screenmap-ci comment  --summary <pr-summary.json> [--map-url U] [--changes-url U] [--artifact-url U]
 //                      [--post --repo owner/name --pr <n>]
-//   appmap-ci publish  --repo owner/name [--branch appmaps] --files src=dest[,src=dest…] --message "…"
-//   appmap-ci flows-pr --repo owner/name --flows <dir> [--base main] --title "…" [--body "…"]
-//   appmap-ci resolve-app --project <dir> [--profile development-simulator]   (EAS: reuse-by-fingerprint or build)
+//   screenmap-ci publish  --repo owner/name [--branch screenmaps] --files src=dest[,src=dest…] --message "…"
+//   screenmap-ci flows-pr --repo owner/name --flows <dir> [--base main] --title "…" [--body "…"]
+//   screenmap-ci resolve-app --project <dir> [--profile development-simulator]   (EAS: reuse-by-fingerprint or build)
 //
 // Runs locally too: the same commands the Action runs, against your own
 // simulator. See docs/ci.md.
@@ -123,7 +123,7 @@ async function baseline() {
   fs.rmSync(work, { recursive: true, force: true }); ensureDir(work)
   const graph = parseRoutes(project, path.join(work, 'graph.json'))
   const scheme = config.scheme ?? graph.scheme
-  if (!scheme) throw new Error('no deep-link scheme: set scheme in .appmap/config.json')
+  if (!scheme) throw new Error('no deep-link scheme: set scheme in .screenmap/config.json')
   const commit = opts.commit ?? git(['rev-parse', 'HEAD'], project)
   const ref = opts.ref ?? git(['rev-parse', '--abbrev-ref', 'HEAD'], project)
   const appName = config.appName ?? path.basename(project)
@@ -172,7 +172,7 @@ async function baseline() {
   }
   for (const id of cap.failed) captureStatus[id] = { status: 'missing', note: 'deep link failed in CI' }
   downscaleAll(screensDir)
-  const out = path.resolve(opts.out ?? path.join(work, `${appName}-${(commit ?? 'local').slice(0, 7)}.appmap`))
+  const out = path.resolve(opts.out ?? path.join(work, `${appName}-${(commit ?? 'local').slice(0, 7)}.scrmap`))
   packBaseline({ graph, screensDir, flowsDir: flowsDirForPack, captureStatus, appName, device: deviceName, commit, ref, out })
   const summary = {
     kind: 'baseline', app: appName, commit, ref, bundle: out, total: graph.routes.length, reused,
@@ -187,7 +187,7 @@ async function baseline() {
 async function pr() {
   const project = path.resolve(opts.project ?? '.')
   const config = loadConfig(project)
-  if (!opts.baseline || !exists(opts.baseline)) throw new Error('--baseline <file.appmap> is required (the base-side map)')
+  if (!opts.baseline || !exists(opts.baseline)) throw new Error('--baseline <file.scrmap> is required (the base-side map)')
   const work = path.join(project, '.expo-map', 'ci', 'pr')
   fs.rmSync(work, { recursive: true, force: true }); ensureDir(work)
   const base = readBaseline(opts.baseline, path.join(work, 'base-bundle'))
@@ -234,7 +234,7 @@ async function pr() {
   for (const id of cap.failed) headStatus[id] = { status: 'missing', note: 'deep link failed in CI' }
   writeJson(path.join(diffDir, 'head', 'capture-status.json'), headStatus)
   downscaleAll(path.join(diffDir, 'head', 'screens'))
-  const out = path.resolve(opts.out ?? path.join(work, `${appName}-${opts.pr ? `pr${opts.pr}` : (headSha ?? 'head').slice(0, 7)}.appmapdiff`))
+  const out = path.resolve(opts.out ?? path.join(work, `${appName}-${opts.pr ? `pr${opts.pr}` : (headSha ?? 'head').slice(0, 7)}.diff.scrmap`))
   packDiff({ diffDir, device: deviceName, out })
   const diff = readJson(path.join(diffDir, 'diff.json'))
   const summary = {
@@ -250,7 +250,7 @@ async function pr() {
   console.log(JSON.stringify(summary, null, 2))
 }
 
-function renderComment(s, { mapUrl, changesUrl, artifactUrl, shotUrl, viewer = 'https://appmap-visualiser.vercel.app' }) {
+function renderComment(s, { mapUrl, changesUrl, artifactUrl, shotUrl, viewer = 'https://app.screenmap.dev' }) {
   const n = s.diff.nodes
   const A = n.filter((x) => x.status === 'A'), M = n.filter((x) => x.status === 'M'), D = n.filter((x) => x.status === 'D')
   const eA = s.diff.edges.filter((e) => e.status === 'A').length, eD = s.diff.edges.filter((e) => e.status === 'D').length
@@ -259,7 +259,7 @@ function renderComment(s, { mapUrl, changesUrl, artifactUrl, shotUrl, viewer = '
   const parts = [`${A.length} screen${A.length === 1 ? '' : 's'} added`, `${M.length} changed`, `${D.length} removed`]
   if (eA || eD) parts.push(`${eA + eD} edge${eA + eD === 1 ? '' : 's'} ${eA && eD ? 'changed' : eA ? 'added' : 'removed'}`)
   if (s.diff.dismissed.length) parts.push(`${s.diff.dismissed.length} suspect${s.diff.dismissed.length === 1 ? '' : 's'} dismissed`)
-  lines.push(`### 🗺 appmap · ${parts.join(' · ')}`)
+  lines.push(`### 🗺 screenmap · ${parts.join(' · ')}`)
   lines.push('')
   if (!n.length) lines.push('_No screen is affected by this change as far as static analysis can tell._')
   const link = mapUrl || changesUrl ? `${viewer}/?${[mapUrl && `map=${encodeURIComponent(mapUrl)}`, changesUrl && `changes=${encodeURIComponent(changesUrl)}`].filter(Boolean).join('&')}` : null
@@ -311,19 +311,19 @@ async function comment() {
 async function publish() {
   const repo = opts.repo ?? repoSlug()
   const files = String(opts.files).split(',').map((p) => { const [src, dest] = p.split('='); return { src, dest } })
-  const res = publishToBranch({ repo, branch: opts.branch ?? 'appmaps', files, message: opts.message ?? 'appmap-ci: publish bundles', cwd: path.resolve(opts.cwd ?? '.') })
+  const res = publishToBranch({ repo, branch: opts.branch ?? 'screenmaps', files, message: opts.message ?? 'screenmap-ci: publish bundles', cwd: path.resolve(opts.cwd ?? '.') })
   console.log(JSON.stringify(res, null, 2))
 }
 
 async function flowsPr() {
   const repo = opts.repo ?? repoSlug()
-  const url = openFlowsPR({ repo, base: opts.base ?? 'main', flowsSrcDir: opts.flows, flowsDestDir: opts.dest ?? '.appmap/flows', title: opts.title ?? 'appmap: record flows for new screens', body: opts.body ?? 'Flows recorded by the appmap agent for screens that had no committed flow. Review the taps, then merge so future runs replay them deterministically.', cwd: path.resolve(opts.cwd ?? '.') })
+  const url = openFlowsPR({ repo, base: opts.base ?? 'main', flowsSrcDir: opts.flows, flowsDestDir: opts.dest ?? '.screenmap/flows', title: opts.title ?? 'screenmap: record flows for new screens', body: opts.body ?? 'Flows recorded by the screenmap agent for screens that had no committed flow. Review the taps, then merge so future runs replay them deterministically.', cwd: path.resolve(opts.cwd ?? '.') })
   console.log(JSON.stringify({ url }))
 }
 
 async function shot() {
   const { takeShot } = await import('./lib/shot.mjs')
-  const out = path.resolve(opts.out ?? 'appmap-shot.png')
+  const out = path.resolve(opts.out ?? 'screenmap-shot.png')
   await takeShot({ mapFile: path.resolve(opts.map), changesFile: opts.changes ? path.resolve(opts.changes) : null, out, viewer: opts.viewer || undefined })
   console.log(JSON.stringify({ shot: out }))
 }
@@ -336,5 +336,5 @@ async function resolveAppCmd() {
 }
 
 const commands = { baseline, pr, comment, publish, 'flows-pr': flowsPr, 'resolve-app': resolveAppCmd, shot }
-if (!commands[cmd]) { console.error('usage: appmap-ci <baseline|pr|comment|publish|flows-pr|resolve-app|shot> [options]'); process.exit(1) }
-commands[cmd]().catch((e) => { console.error('[appmap-ci] failed:', e.message); process.exit(1) })
+if (!commands[cmd]) { console.error('usage: screenmap-ci <baseline|pr|comment|publish|flows-pr|resolve-app|shot> [options]'); process.exit(1) }
+commands[cmd]().catch((e) => { console.error('[screenmap-ci] failed:', e.message); process.exit(1) })

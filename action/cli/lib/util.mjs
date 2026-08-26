@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-export const log = (...a) => console.error('[appmap-ci]', ...a)
+export const log = (...a) => console.error('[screenmap-ci]', ...a)
 export const sh = (cmd, args, opts = {}) =>
   execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts }).trim()
 export const shOk = (cmd, args, opts = {}) => spawnSync(cmd, args, { encoding: 'utf8', ...opts }).status === 0
@@ -32,7 +32,7 @@ export function parseArgs(argv) {
   return { opts, positional }
 }
 
-// .appmap/config.json — the purely mechanical knobs the deterministic lane
+// .screenmap/config.json — the purely mechanical knobs the deterministic lane
 // needs without an LLM. Everything is optional; these are the defaults.
 export function loadConfig(projectDir) {
   const defaults = {
@@ -40,10 +40,10 @@ export function loadConfig(projectDir) {
     waits: { transition: 2500, network: 6000, boot: 15000 },
     suspects: { depth: 2, broadCap: 8 },
     agent: { enabled: true, maxScreens: 8, model: null, provider: null, command: null, keyEnv: null },
-    flowsDir: '.appmap/flows', skillFile: '.appmap/SKILL.md',
+    flowsDir: '.screenmap/flows', skillFile: '.screenmap/SKILL.md',
     params: {},
   }
-  const user = readJson(path.join(projectDir, '.appmap', 'config.json'), {})
+  const user = readJson(path.join(projectDir, '.screenmap', 'config.json'), {})
   const merged = {
     ...defaults, ...user,
     waits: { ...defaults.waits, ...(user.waits ?? {}) },
@@ -51,7 +51,7 @@ export function loadConfig(projectDir) {
     agent: { ...defaults.agent, ...(user.agent ?? {}) },
   }
   if (process.env.AGENT_MAX_SCREENS) merged.agent.maxScreens = Number(process.env.AGENT_MAX_SCREENS) || merged.agent.maxScreens
-  if (process.env.APPMAP_APP_PATH) merged.appPath = process.env.APPMAP_APP_PATH // a prebuilt client (e.g. from EAS) beats ios/build discovery
+  if (process.env.SCREENMAP_APP_PATH) merged.appPath = process.env.SCREENMAP_APP_PATH // a prebuilt client (e.g. from EAS) beats ios/build discovery
   return merged
 }
 

@@ -1,6 +1,6 @@
-# .github/workflows/appmap-baseline.yml — keep the map of main fresh, and
+# .github/workflows/screenmap-baseline.yml — keep the map of main fresh, and
 # turn agent discoveries into committed flows
-name: appmap · baseline
+name: screenmap · baseline
 on:
   push:
     branches: [main]
@@ -13,7 +13,7 @@ on:
         type: boolean
         default: false
 concurrency:
-  group: appmap-baseline
+  group: screenmap-baseline
   cancel-in-progress: false
 permissions:
   contents: write

@@ -1,13 +1,13 @@
-# .github/workflows/appmap-pr.yml — review what a PR changes on-screen
-name: appmap · PR changes
+# .github/workflows/screenmap-pr.yml — review what a PR changes on-screen
+name: screenmap · PR changes
 on:
   pull_request:
     types: [opened, synchronize, reopened]
 concurrency:
-  group: appmap-pr-${{ github.event.pull_request.number }}
+  group: screenmap-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 permissions:
-  contents: write        # push bundles to the appmaps branch (set publish: false to drop this)
+  contents: write        # push bundles to the screenmaps branch (set publish: false to drop this)
   pull-requests: write   # sticky comment
 jobs:
   changes:

@@ -36,27 +36,27 @@ function serveFiles(files) {
   })
 }
 
-export async function takeShot({ mapFile, changesFile, out, viewer = 'https://appmap-visualiser.vercel.app', width = 1500, height = 940 }) {
+export async function takeShot({ mapFile, changesFile, out, viewer = 'https://app.screenmap.dev', width = 1500, height = 940 }) {
   const chrome = findChrome()
   if (!chrome) throw new Error('no Chrome found for the comment image (set CHROME_PATH)')
-  const files = { 'base.appmap': mapFile }
-  if (changesFile) files['changes.appmapdiff'] = changesFile
+  const files = { 'base.scrmap': mapFile }
+  if (changesFile) files['changes.diff.scrmap'] = changesFile
   for (const f of Object.values(files)) if (!fs.existsSync(f)) throw new Error(`missing bundle: ${f}`)
   const server = await serveFiles(files)
   const { default: puppeteer } = await import('puppeteer-core')
   const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--no-sandbox', '--force-color-profile=srgb'] })
   try {
     const params = new URLSearchParams()
-    params.set('map', `http://localhost:${server.port}/base.appmap`)
-    if (changesFile) params.set('changes', `http://localhost:${server.port}/changes.appmapdiff`)
+    params.set('map', `http://localhost:${server.port}/base.scrmap`)
+    if (changesFile) params.set('changes', `http://localhost:${server.port}/changes.diff.scrmap`)
     params.set('shot', changesFile ? 'changed' : 'all')
     const url = `${viewer}/?${params}`
     const page = await browser.newPage()
     await page.setViewport({ width, height, deviceScaleFactor: 2 })
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 90000 })
-    await page.waitForFunction('window.__appmapShotReady === true', { timeout: 90000 })
+    await page.waitForFunction('window.__screenmapShotReady === true', { timeout: 90000 })
     // crop to the framed nodes (plus breathing room), clamped to the viewport
-    const b = await page.evaluate('window.__appmapShotBounds')
+    const b = await page.evaluate('window.__screenmapShotBounds')
     const clip = b
       ? (() => {
           const m = 28

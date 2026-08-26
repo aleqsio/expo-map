@@ -1,12 +1,12 @@
 {
-  "$comment": ".appmap/config.json — mechanical knobs for the deterministic lane. All optional.",
+  "$comment": ".screenmap/config.json — mechanical knobs for the deterministic lane. All optional.",
   "scheme": "myapp",
   "device": "iPhone 17 Pro",
   "appName": "myapp",
   "waits": { "transition": 2500, "network": 6000, "boot": 15000 },
   "suspects": { "depth": 2, "broadCap": 8 },
   "agent": {
-    "$comment": "provider: claude (default) | codex | gemini | opencode; or command: a bash template run instead ({promptFile} / $APPMAP_PROMPT_FILE carry the task), with keyEnv naming the env var it needs",
+    "$comment": "provider: claude (default) | codex | gemini | opencode; or command: a bash template run instead ({promptFile} / $SCREENMAP_PROMPT_FILE carry the task), with keyEnv naming the env var it needs",
     "enabled": true,
     "maxScreens": 8,
     "provider": "claude"

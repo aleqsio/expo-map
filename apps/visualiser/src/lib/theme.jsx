@@ -1,10 +1,11 @@
 import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes'
 
-// Dark-first: screenshots read best on a dark ground. System and light are a
-// click away; the choice persists per browser.
+// Paper-first: the viewer wears the same printed-paper world as the landing
+// page. Ink (the negative of the same press run) and system are a click away;
+// the choice persists per browser.
 export function ThemeProvider({ children }) {
   return (
-    <NextThemesProvider attribute="class" defaultTheme="dark" enableSystem storageKey="appmap-theme">
+    <NextThemesProvider attribute="class" defaultTheme="light" enableSystem storageKey="screenmap-theme">
       {children}
     </NextThemesProvider>
   )

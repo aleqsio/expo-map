@@ -1,6 +1,6 @@
-# .appmapdiff bundle format (v1)
+# .diff.scrmap bundle format (v1)
 
-A `.appmapdiff` file is a plain **zip** describing how an app's navigation map changed
+A `.diff.scrmap` file is a plain **zip** describing how an app's navigation map changed
 between two revisions — typically the base and head of a pull request. It follows git
 semantics: the artifact *is* the diff, self-contained and shareable, like a `.patch`
 with screenshots.
@@ -9,10 +9,10 @@ It embeds both sides' graphs plus captures for the **suspect set** only — the 
 static analysis says the change could touch — not a full re-capture of the app.
 
 ```
-myapp-pr123.appmapdiff         (zip)
+myapp-pr123.diff.scrmap         (zip)
 ├── manifest.json              # formatVersion: 1, kind: "diff", base/head/pr metadata
 ├── diff.json                  # the verdict: nodes/edges/states classified A/M/D
-├── base/map.json              # full graph of the base revision (map.json schema from appmap v2)
+├── base/map.json              # full graph of the base revision (map.json schema from screenmap v2)
 ├── head/map.json              # full graph of the head revision
 ├── base/screens/*.png         # suspect-set captures at base
 └── head/screens/*.png         # suspect-set captures at head
@@ -27,7 +27,7 @@ human reviewing the diff, not input to the classification.
 ```jsonc
 {
   "formatVersion": 1,
-  "kind": "diff",                  // discriminates from plain .appmap bundles
+  "kind": "diff",                  // discriminates from plain .scrmap bundles
   "generator": "expo-map/1.0",
   "app": { "name": "bluesky", "scheme": "bluesky", "platform": "ios-simulator",
            "device": "iPhone 17 Pro", "mode": "react-navigation" },
@@ -109,7 +109,7 @@ Semantics:
   bundles. `A` nodes have head captures only, `D` nodes base only, `M` nodes ideally
   both. Missing captures are allowed (e.g. auth-walled) — viewers show a placeholder.
 - Viewers must ignore unknown fields and reject `formatVersion` they don't support.
-- **Backdrop merge**: viewers MAY overlay a diff on a full `.appmap` of the same app
+- **Backdrop merge**: viewers MAY overlay a diff on a full `.scrmap` of the same app
   (matched by `app.name`) — unchanged screens then show their real (dimmed)
   screenshots from the full bundle while the diff supplies annotations and
   base/head captures for the suspect set. The reference visualiser does this

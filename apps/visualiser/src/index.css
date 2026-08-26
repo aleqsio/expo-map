@@ -1,20 +1,27 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/manrope";
-@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/newsreader";
+@import "@fontsource-variable/doto";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
 
 @custom-variant dark (&:is(.dark *));
 
 /* ------------------------------------------------------------------ tokens
-   appmap — an atlas of an app. Cool slate grounds with one accent, Lagoon
-   (teal-cyan), for the map layer; the diff semantics (added / changed /
-   removed) are their own trio and never borrow the accent.
+   Screenmap — the landing page's world, carried into the viewer: printed
+   paper, black 2px rules, Newsreader for text, Doto only as small decoration,
+   IBM Plex Mono on every control. A two-colour press: black ink plus one spot
+   blue, which is the only thing allowed to mark a path or a selection.
+
+   The diff semantics (added / changed / removed) are a third plate of their
+   own and never borrow the spot colour.
 */
 @theme inline {
-  --font-sans: 'Manrope Variable', ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: 'Newsreader Variable', Georgia, "Times New Roman", serif;
   --font-heading: var(--font-sans);
-  --font-mono: 'JetBrains Mono Variable', ui-monospace, "SF Mono", Menlo, monospace;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-dot: 'Doto Variable', 'IBM Plex Mono', monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -40,6 +47,7 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-focus: var(--focus);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -49,92 +57,136 @@
   --color-added: var(--added);
   --color-changed: var(--changed);
   --color-removed: var(--removed);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: calc(var(--radius) * 1.25);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-3xl: calc(var(--radius) * 2);
+  --radius-4xl: calc(var(--radius) * 2.4);
 }
 
+/* Paper — the landing page's palette, verbatim. */
 :root {
-  --background: oklch(0.975 0.004 250);
-  --foreground: oklch(0.21 0.02 255);
-  --card: oklch(0.995 0.002 250);
-  --card-foreground: oklch(0.21 0.02 255);
-  --popover: oklch(0.995 0.002 250);
-  --popover-foreground: oklch(0.21 0.02 255);
-  --primary: oklch(0.54 0.10 200);
-  --primary-foreground: oklch(0.985 0.01 200);
-  --secondary: oklch(0.945 0.006 250);
-  --secondary-foreground: oklch(0.25 0.02 255);
-  --muted: oklch(0.94 0.006 250);
-  --muted-foreground: oklch(0.5 0.02 255);
-  --accent: oklch(0.93 0.02 200);
-  --accent-foreground: oklch(0.25 0.02 255);
-  --destructive: oklch(0.58 0.2 25);
-  --border: oklch(0.9 0.008 250);
-  --input: oklch(0.9 0.008 250);
-  --ring: oklch(0.54 0.10 200);
-  --chart-1: oklch(0.54 0.10 200);
-  --chart-2: oklch(0.55 0.15 155);
-  --chart-3: oklch(0.66 0.15 75);
-  --chart-4: oklch(0.58 0.2 25);
-  --chart-5: oklch(0.5 0.02 255);
-  --radius: 0.75rem;
-  --sidebar: oklch(0.985 0.003 250);
-  --sidebar-foreground: oklch(0.21 0.02 255);
-  --sidebar-primary: oklch(0.54 0.10 200);
-  --sidebar-primary-foreground: oklch(0.985 0.01 200);
-  --sidebar-accent: oklch(0.94 0.006 250);
-  --sidebar-accent-foreground: oklch(0.25 0.02 255);
-  --sidebar-border: oklch(0.9 0.008 250);
-  --sidebar-ring: oklch(0.54 0.10 200);
-  --added: oklch(0.55 0.15 155);
-  --changed: oklch(0.66 0.15 75);
-  --removed: oklch(0.58 0.2 25);
-  --canvas-dot: oklch(0.21 0.02 255 / 0.12);
-  --phone-frame: oklch(0.28 0.015 255);
+  --ink: #000;
+  --paper: #F2F1E9;
+  --paper-2: #FAF9F4;
+  --paper-3: #E7E5DA;
+  --soft: #5B5B52;
+  --body: #26261F;
+
+  /* rule weight, shared by every border in the app */
+  --w: 2px;
+  /* the offset block shadow that gives chrome its printed lift. Chrome only —
+     never behind a screen, where it reads as a stray rule under the device. */
+  --lift: 3px 3px 0 var(--ink);
+  --lift-hi: 5px 6px 0 var(--ink);
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-2);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-2);
+  --popover-foreground: var(--ink);
+  /* the spot colour: one extra plate on a black-ink press. Deep and
+     recessive — it marks a path without competing with the captures. */
+  --primary: #20456E;
+  /* Focus is the same plate run bright: what the reader is looking at right
+     now. A heavier black rule read as a thicker bezel rather than a state, so
+     selection gets colour and lets weight alone mean "device". */
+  --focus: #1F6FD0;
+  --primary-foreground: var(--paper-2);
+  --secondary: var(--paper-3);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-3);
+  --muted-foreground: var(--soft);
+  --accent: var(--paper-3);
+  --accent-foreground: var(--ink);
+  --destructive: #A32C1E;
+  --border: var(--ink);
+  --input: var(--ink);
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: #1F6F3D;
+  --chart-3: #8A6100;
+  --chart-4: #A32C1E;
+  --chart-5: var(--soft);
+  --radius: 0.5rem;
+  --sidebar: var(--paper-2);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--paper-2);
+  --sidebar-accent: var(--paper-3);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--ink);
+  --sidebar-ring: var(--primary);
+  /* the third plate. Deep enough to hold against paper. */
+  --added: #1F6F3D;
+  --changed: #8A6100;
+  --removed: #A32C1E;
+  --canvas-dot: rgba(0, 0, 0, 0.16);
+  --phone-frame: var(--ink);
+  /* Receding a screen washes it toward the paper instead of thinning its
+     alpha. A translucent node stops occluding the graph, and the black rules
+     behind it read straight through — which looks like edges drawn on top of
+     the screens. Same trick, and same reason, as --plate-lift on the site. */
+  --wash-strong: contrast(0.3) brightness(1.44) saturate(0.28);
+  --wash-soft: contrast(0.55) brightness(1.2) saturate(0.5);
 }
 
+/* Ink — the same press run negative, for anyone who keeps the viewer dark.
+   Same rules, same type, paper and ink swapped. */
 .dark {
-  --background: oklch(0.175 0.012 255);
-  --foreground: oklch(0.93 0.008 250);
-  --card: oklch(0.215 0.012 255);
-  --card-foreground: oklch(0.93 0.008 250);
-  --popover: oklch(0.235 0.012 255);
-  --popover-foreground: oklch(0.93 0.008 250);
-  --primary: oklch(0.78 0.11 200);
-  --primary-foreground: oklch(0.2 0.03 200);
-  --secondary: oklch(0.27 0.012 255);
-  --secondary-foreground: oklch(0.93 0.008 250);
-  --muted: oklch(0.26 0.012 255);
-  --muted-foreground: oklch(0.68 0.015 250);
-  --accent: oklch(0.3 0.03 200);
-  --accent-foreground: oklch(0.93 0.008 250);
-  --destructive: oklch(0.7 0.18 25);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.78 0.11 200);
-  --chart-1: oklch(0.78 0.11 200);
-  --chart-2: oklch(0.7 0.16 155);
-  --chart-3: oklch(0.8 0.15 80);
-  --chart-4: oklch(0.7 0.19 25);
-  --chart-5: oklch(0.68 0.015 250);
-  --sidebar: oklch(0.215 0.012 255);
-  --sidebar-foreground: oklch(0.93 0.008 250);
-  --sidebar-primary: oklch(0.78 0.11 200);
-  --sidebar-primary-foreground: oklch(0.2 0.03 200);
-  --sidebar-accent: oklch(0.27 0.012 255);
-  --sidebar-accent-foreground: oklch(0.93 0.008 250);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.78 0.11 200);
-  --added: oklch(0.7 0.16 155);
-  --changed: oklch(0.8 0.15 80);
-  --removed: oklch(0.7 0.19 25);
-  --canvas-dot: oklch(1 0 0 / 0.07);
-  --phone-frame: oklch(0.16 0.012 255);
+  --ink: #F2F1E9;
+  --paper: #14140F;
+  --paper-2: #1C1C16;
+  --paper-3: #2A2A22;
+  --soft: #A8A79B;
+  --body: #E7E5DA;
+
+  --lift: 3px 3px 0 var(--ink);
+  --lift-hi: 5px 6px 0 var(--ink);
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-2);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-2);
+  --popover-foreground: var(--ink);
+  --primary: #8FB6E4;
+  --focus: #63A8FF;
+  --primary-foreground: #14140F;
+  --secondary: var(--paper-3);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-3);
+  --muted-foreground: var(--soft);
+  --accent: var(--paper-3);
+  --accent-foreground: var(--ink);
+  --destructive: #E4796A;
+  --border: var(--ink);
+  --input: var(--ink);
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: #6FC48F;
+  --chart-3: #D8AC4A;
+  --chart-4: #E4796A;
+  --chart-5: var(--soft);
+  --sidebar: var(--paper-2);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: #14140F;
+  --sidebar-accent: var(--paper-3);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--ink);
+  --sidebar-ring: var(--primary);
+  --added: #6FC48F;
+  --changed: #D8AC4A;
+  --removed: #E4796A;
+  --canvas-dot: rgba(242, 241, 233, 0.14);
+  --phone-frame: #2E2E26;
+  /* the negative washes down into the ground, not up toward white */
+  --wash-strong: contrast(0.42) brightness(0.46) saturate(0.3);
+  --wash-soft: contrast(0.62) brightness(0.72) saturate(0.5);
 }
 
 @layer base {
@@ -142,21 +194,38 @@
   html { @apply font-sans antialiased; }
   body { @apply bg-background text-foreground; overflow: hidden; }
   html, body, #root { height: 100%; margin: 0; }
-  h1, h2, h3 { text-wrap: balance; }
+  h1, h2, h3 { text-wrap: balance; letter-spacing: -0.014em; font-weight: 400; }
   p { text-wrap: pretty; }
   .tnum { font-variant-numeric: tabular-nums; }
+
+  /* Controls are mono, the way they are on the landing page. Serif is for
+     prose and names; it is not a button face. */
+  button, input, select, textarea, label, [role="menuitem"], [role="tab"] {
+    font-family: var(--font-mono);
+    letter-spacing: 0.01em;
+  }
 }
 
-/* ------------------------------------------------------------- chrome */
+/* A small caps-and-dots label. Doto is decoration only — never body copy. */
+@utility dotlabel {
+  font-family: var(--font-dot);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+/* ------------------------------------------------------------- chrome
+   Printed cards: paper, a 2px rule, and an offset block shadow. No blur —
+   frosted glass belongs to the landing's photograph, and there is no
+   photograph here for it to sit on.
+*/
 @utility panel {
-  background: color-mix(in oklch, var(--card) 86%, transparent);
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
-  border-radius: var(--radius-xl);
-  box-shadow:
-    0 0 0 1px color-mix(in oklch, var(--foreground) 9%, transparent),
-    0 1px 1px oklch(0 0 0 / 0.06),
-    0 10px 30px -8px oklch(0 0 0 / 0.25);
+  background: var(--card);
+  border: var(--w) solid var(--ink);
+  border-radius: var(--radius-md);
+  box-shadow: var(--lift);
 }
 
 /* ----------------------------------------------------------- graph nodes
@@ -173,20 +242,22 @@
 }
 .screen-node:hover { translate: 0 -3px; }
 .screen-node:active { scale: 0.97; }
-.screen-node.dimmed { opacity: 0.14; filter: saturate(0.3); }
-.screen-node.diff-unchanged { opacity: 0.36; filter: saturate(0.5); }
-.screen-node.diff-unchanged:hover, .screen-node.diff-unchanged.selected { opacity: 1; filter: none; }
+.screen-node.dimmed { filter: var(--wash-strong); }
+.screen-node.diff-unchanged { filter: var(--wash-soft); }
+.screen-node.diff-unchanged:hover, .screen-node.diff-unchanged.selected { filter: none; }
 
+/* The device frame stays a device: an ink bezel with the capture set
+   concentrically inside it. The shadow is soft and almost straight down —
+   enough to lift the phone off the paper, and deliberately NOT the offset
+   block used on chrome, which behind a screen just reads as a stray rule. */
 .phone {
   position: relative;
-  border-radius: 26px;
+  border-radius: 24px;
   padding: 5px;
   background: var(--phone-frame);
   box-shadow:
-    inset 0 1px 0 oklch(1 0 0 / 0.07),
-    0 1px 1px oklch(0 0 0 / 0.3),
-    0 6px 18px oklch(0 0 0 / 0.25),
-    0 24px 48px oklch(0 0 0 / 0.22);
+    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 6px 14px -4px rgba(0, 0, 0, 0.18);
   transition-property: box-shadow;
   transition-duration: 0.3s;
   transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
@@ -196,131 +267,247 @@
   width: 100%;
   aspect-ratio: 402 / 874;
   object-fit: cover;
-  border-radius: 21px; /* concentric: 26 − 5 */
-  outline: 1px solid oklch(1 0 0 / 0.1);
-  outline-offset: -1px;
+  border-radius: 19px; /* concentric: 24 − 5 */
+  background: var(--paper-2);
 }
 .no-shot {
   aspect-ratio: 402 / 874;
-  border-radius: 21px;
+  border-radius: 19px;
   display: grid;
   place-items: center;
-  color: var(--muted-foreground);
+  color: var(--soft);
+  font-family: var(--font-mono);
   font-size: 11px;
-  background: repeating-linear-gradient(45deg, transparent, transparent 10px, oklch(1 0 0 / 0.04) 10px, oklch(1 0 0 / 0.04) 11px);
+  background:
+    var(--paper-2)
+    repeating-linear-gradient(45deg, transparent, transparent 9px, rgba(0, 0, 0, 0.07) 9px, rgba(0, 0, 0, 0.07) 11px);
 }
 
-/* rings: selection / path / current / diff status — selection always wins */
-.screen-node.on-path .phone { box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.07), 0 0 0 2px color-mix(in oklch, var(--primary) 90%, transparent), 0 0 28px color-mix(in oklch, var(--primary) 35%, transparent), 0 24px 48px oklch(0 0 0 / 0.22); }
-.screen-node.current .phone { box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.07), 0 0 0 3px var(--primary), 0 0 42px color-mix(in oklch, var(--primary) 50%, transparent), 0 24px 48px oklch(0 0 0 / 0.22); }
-.screen-node.diff-a .phone { box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.07), 0 0 0 2px color-mix(in oklch, var(--added) 85%, transparent), 0 0 24px color-mix(in oklch, var(--added) 30%, transparent), 0 24px 48px oklch(0 0 0 / 0.22); }
-.screen-node.diff-m .phone { box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.07), 0 0 0 2px color-mix(in oklch, var(--changed) 85%, transparent), 0 0 24px color-mix(in oklch, var(--changed) 30%, transparent), 0 24px 48px oklch(0 0 0 / 0.22); }
-.screen-node.diff-d .phone { box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.07), 0 0 0 2px color-mix(in oklch, var(--removed) 80%, transparent), 0 0 24px color-mix(in oklch, var(--removed) 28%, transparent), 0 24px 48px oklch(0 0 0 / 0.22); }
-.screen-node.diff-d .phone img { filter: grayscale(0.7) brightness(0.6); }
-.screen-node.selected .phone { box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.07), 0 0 0 2px var(--foreground), 0 0 28px color-mix(in oklch, var(--foreground) 25%, transparent), 0 24px 48px oklch(0 0 0 / 0.22); }
+/* rings: selection / path / current / diff status — selection always wins.
+   Each is a rule drawn tight around the bezel, in the press's own colours. */
+.screen-node.on-path .phone { box-shadow: 0 0 0 2px var(--primary), 0 6px 14px -4px rgba(0, 0, 0, 0.18); }
+.screen-node.current .phone { box-shadow: 0 0 0 3px var(--primary), 0 6px 16px -4px rgba(0, 0, 0, 0.22); }
+/* A screen the diff touched wears its status as the device itself: the whole
+   bezel takes the colour, rather than a ring drawn around a black frame. The
+   matching outer rule just thickens that band so it still carries at the zoom
+   levels where a 5px bezel would thin out to nothing. */
+.screen-node.diff-a .phone { background: var(--added); box-shadow: 0 0 0 2px var(--added), 0 6px 14px -4px rgba(0, 0, 0, 0.18); }
+.screen-node.diff-m .phone { background: var(--changed); box-shadow: 0 0 0 2px var(--changed), 0 6px 14px -4px rgba(0, 0, 0, 0.18); }
+.screen-node.diff-d .phone { background: var(--removed); box-shadow: 0 0 0 2px var(--removed), 0 6px 14px -4px rgba(0, 0, 0, 0.18); }
+.screen-node.diff-d .phone img { filter: grayscale(0.8) brightness(0.92) contrast(0.95); }
+.screen-node.selected .phone { box-shadow: 0 0 0 3px var(--focus), 0 6px 16px -4px rgba(0, 0, 0, 0.22); }
 
-.phone.broken img { filter: grayscale(0.85) brightness(0.4) contrast(0.9); transition-property: filter; transition-duration: 0.3s; }
-.screen-node:hover .phone.broken img { filter: grayscale(0.5) brightness(0.55); }
+.phone.broken img { filter: grayscale(0.9) contrast(0.85) brightness(1.04); transition-property: filter; transition-duration: 0.3s; }
+.screen-node:hover .phone.broken img { filter: grayscale(0.5) contrast(0.92); }
 .fix-overlay {
-  position: absolute; inset: 5px; border-radius: 21px;
+  position: absolute; inset: 5px; border-radius: 19px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   padding: 14px 10px; text-align: center;
-  background: linear-gradient(180deg, oklch(0.1 0.01 255 / 0.25), oklch(0.1 0.01 255 / 0.66));
-  color: oklch(0.98 0 0);
+  background: rgba(242, 241, 233, 0.86);
+  color: var(--body);
 }
 .fix-icon { font-size: 20px; color: var(--changed); }
-.fix-status { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--changed); }
-.fix-hint { font-size: 8.5px; line-height: 1.45; opacity: 0.85; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.fix-status {
+  font-family: var(--font-dot); font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.1em; color: var(--changed);
+}
+.fix-hint {
+  font-family: var(--font-mono); font-size: 8.5px; line-height: 1.45; opacity: 0.9;
+  display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
+}
 
 /* gesture overlays during flow playback */
 .tap-marker {
   position: absolute; width: 22px; height: 22px; translate: -50% -50%; border-radius: 99px;
-  background: color-mix(in oklch, var(--primary) 35%, transparent);
+  background: color-mix(in srgb, var(--primary) 26%, transparent);
   border: 2px solid var(--primary);
-  box-shadow: 0 0 16px color-mix(in oklch, var(--primary) 70%, transparent);
   pointer-events: none;
 }
-.tap-marker::before { content: ""; position: absolute; inset: -2px; border-radius: 99px; border: 2px solid color-mix(in oklch, var(--primary) 80%, transparent); animation: tap-ripple 1.4s cubic-bezier(0.2, 0, 0, 1) infinite; }
+.tap-marker::before { content: ""; position: absolute; inset: -2px; border-radius: 99px; border: 2px solid var(--primary); animation: tap-ripple 1.4s cubic-bezier(0.2, 0, 0, 1) infinite; }
 @keyframes tap-ripple { 0% { transform: scale(1); opacity: 1; } 70%, 100% { transform: scale(2.4); opacity: 0; } }
 .swipe-marker { position: absolute; inset: 5px; width: calc(100% - 10px); height: calc(100% - 10px); pointer-events: none; }
-.swipe-marker line { stroke: var(--primary); stroke-width: 1.2; stroke-linecap: round; stroke-dasharray: 4 3; filter: drop-shadow(0 0 3px color-mix(in oklch, var(--primary) 80%, transparent)); animation: swipe-dash 1s linear infinite; }
+.swipe-marker line { stroke: var(--primary); stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 4 3; animation: swipe-dash 1s linear infinite; }
 @keyframes swipe-dash { to { stroke-dashoffset: -14; } }
 @media (prefers-reduced-motion: reduce) { .tap-marker::before, .swipe-marker line { animation: none; } }
 
-/* in-phone tags: state (bottom), diff status (top), comparator side (bottom) */
+/* in-phone tags: state (bottom), diff status (top), comparator side (bottom).
+   Set solid in ink so they hold over any screenshot. */
 .phone-tag {
   position: absolute; left: 50%; translate: -50% 0;
-  padding: 3px 10px; border-radius: 99px;
-  background: oklch(0.12 0.01 255 / 0.82); backdrop-filter: blur(8px);
-  font-size: 10px; font-weight: 700; white-space: nowrap; letter-spacing: 0.02em;
-  color: oklch(0.96 0 0); pointer-events: none;
+  padding: 3px 9px; border-radius: 3px;
+  background: var(--ink); color: var(--paper-2);
+  border: 1px solid var(--ink);
+  font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+  white-space: nowrap; letter-spacing: 0.02em; pointer-events: none;
 }
-.phone-tag.top { top: 10px; }
-.phone-tag.bottom { bottom: 10px; }
-.phone-tag.state { border: 1px solid color-mix(in oklch, var(--primary) 55%, transparent); color: color-mix(in oklch, var(--primary) 85%, white); }
-.phone-tag.a { border: 1px solid color-mix(in oklch, var(--added) 55%, transparent); color: var(--added); }
-.phone-tag.m { border: 1px solid color-mix(in oklch, var(--changed) 55%, transparent); color: var(--changed); }
-.phone-tag.d { border: 1px solid color-mix(in oklch, var(--removed) 55%, transparent); color: var(--removed); }
-.phone-tag.side { text-transform: uppercase; letter-spacing: 0.06em; }
-.phone-tag.side.head { color: var(--added); border: 1px solid color-mix(in oklch, var(--added) 50%, transparent); }
-.phone-tag.side.base { color: oklch(0.8 0 0); border: 1px solid oklch(1 0 0 / 0.25); }
-.phone-tag.side.delta { color: var(--removed); border: 1px solid color-mix(in oklch, var(--removed) 50%, transparent); }
+.phone-tag.top { top: 9px; }
+.phone-tag.bottom { bottom: 9px; }
+.phone-tag.state { background: var(--primary); border-color: var(--primary); color: var(--paper-2); }
+.phone-tag.a { background: var(--added); border-color: var(--added); color: var(--paper-2); }
+.phone-tag.m { background: var(--changed); border-color: var(--changed); color: var(--paper-2); }
+.phone-tag.d { background: var(--removed); border-color: var(--removed); color: var(--paper-2); }
+.phone-tag.side { font-family: var(--font-dot); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
+.phone-tag.side.head { background: var(--added); border-color: var(--added); }
+.phone-tag.side.base { background: var(--ink); border-color: var(--ink); }
+.phone-tag.side.delta { background: var(--removed); border-color: var(--removed); }
 
-.node-label { display: flex; align-items: center; gap: 6px; margin-top: 8px; justify-content: center; }
-.node-label .dot { width: 7px; height: 7px; border-radius: 99px; background: hsl(var(--group-hue) 60% 58%); box-shadow: 0 0 8px hsl(var(--group-hue) 60% 52% / 0.55); flex: none; }
-.node-label .path { font-family: var(--font-mono); font-size: 10.5px; color: var(--foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.node-badge { margin-top: 3px; text-align: center; font-size: 9.5px; color: var(--changed); }
+/* The route caption under a screen: mono on a paper chip with a rule, the way
+   the landing page captions its own map. */
+.node-label { display: flex; align-items: center; gap: 6px; margin-top: 8px; justify-content: center; max-width: 100%; }
+.node-label .dot { width: 7px; height: 7px; border-radius: 99px; background: hsl(var(--group-hue) 45% 38%); border: 1px solid var(--ink); flex: none; }
+.node-label .path {
+  font-family: var(--font-mono); font-size: 10px; line-height: 1.2; color: var(--ink);
+  background: var(--paper-2); border: var(--w) solid var(--ink); border-radius: 3px;
+  padding: 3px 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.screen-node.selected .node-label .path { background: var(--focus); border-color: var(--focus); color: var(--paper-2); }
+.node-badge {
+  margin-top: 4px; text-align: center; color: var(--changed);
+  font-family: var(--font-dot); font-size: 9.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
 .port { opacity: 0; pointer-events: none; }
 
 /* state picker trigger on nodes (the menu itself is a Popover) */
 .state-chip {
   display: flex; align-items: center; gap: 6px; margin: 6px auto 0;
-  padding: 4px 10px; min-height: 24px; border-radius: 99px;
-  border: 1px solid color-mix(in oklch, var(--primary) 40%, transparent);
-  background: oklch(0.12 0.01 255 / 0.7); color: color-mix(in oklch, var(--primary) 85%, white);
-  font-size: 10px; font-weight: 600; cursor: pointer; white-space: nowrap; max-width: 100%;
-  transition-property: border-color, background-color; transition-duration: 0.2s;
+  padding: 3px 9px; min-height: 22px; border-radius: 3px;
+  border: var(--w) solid var(--ink);
+  background: var(--paper-2); color: var(--ink);
+  font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+  cursor: pointer; white-space: nowrap; max-width: 100%;
+  transition-property: background-color, color; transition-duration: 0.2s;
 }
-.state-chip:hover { border-color: color-mix(in oklch, var(--primary) 75%, transparent); background: color-mix(in oklch, var(--primary) 12%, oklch(0.12 0.01 255 / 0.7)); }
-.state-chip.has-diff { border-color: color-mix(in oklch, var(--changed) 60%, transparent); color: var(--changed); }
+.state-chip:hover { background: var(--ink); color: var(--paper-2); }
+.state-chip:hover .st-dot { border-color: var(--paper-2); }
+.state-chip.has-diff { border-color: var(--changed); color: var(--changed); }
+.state-chip.has-diff:hover { background: var(--changed); color: var(--paper-2); border-color: var(--changed); }
 .state-chip.static { cursor: default; opacity: 0.75; }
+.state-chip.static:hover { background: var(--paper-2); color: var(--ink); }
 .state-chip .lbl { overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
-.st-dot { width: 7px; height: 7px; flex: none; border-radius: 99px; }
-.st-dot.a { background: var(--added); box-shadow: 0 0 7px color-mix(in oklch, var(--added) 70%, transparent); }
-.st-dot.m { background: var(--changed); box-shadow: 0 0 7px color-mix(in oklch, var(--changed) 70%, transparent); }
-.st-dot.d { background: var(--removed); box-shadow: 0 0 7px color-mix(in oklch, var(--removed) 70%, transparent); }
+.st-dot { width: 7px; height: 7px; flex: none; border-radius: 99px; border: 1px solid var(--ink); }
+.st-dot.a { background: var(--added); }
+.st-dot.m { background: var(--changed); }
+.st-dot.d { background: var(--removed); }
 
-/* ---------------------------------------------------------------- edges */
+/* ---------------------------------------------------------------- edges
+   Black 2px rules, as on the landing page's map. */
 .react-flow__edge { cursor: pointer; }
-.react-flow__edge-path { stroke: color-mix(in oklch, var(--foreground) 16%, transparent); stroke-width: 1.4; transition-property: stroke; transition-duration: 0.2s; }
-.react-flow__edge:hover .react-flow__edge-path { stroke: color-mix(in oklch, var(--foreground) 40%, transparent); }
-.edge-faded .react-flow__edge-path { stroke: color-mix(in oklch, var(--foreground) 5%, transparent); }
-.edge-on-path .react-flow__edge-path { stroke: var(--primary); stroke-width: 2.4; filter: drop-shadow(0 0 6px color-mix(in oklch, var(--primary) 55%, transparent)); }
+.react-flow__edge-path {
+  stroke: var(--ink); stroke-width: 1.8; opacity: 0.72;
+  transition-property: opacity, stroke, stroke-width; transition-duration: 0.2s;
+}
+.react-flow__edge:hover .react-flow__edge-path { opacity: 1; stroke-width: 2.4; }
+.edge-faded .react-flow__edge-path { opacity: 0.18; }
+.edge-on-path .react-flow__edge-path { stroke: var(--primary); stroke-width: 2.6; opacity: 1; }
 .edge-synthetic .react-flow__edge-path { stroke-dasharray: 7 5; }
 .edge-observed .react-flow__edge-path { stroke-dasharray: 6 5; }
-.edge-observed.edge-normal .react-flow__edge-path { stroke: color-mix(in oklch, var(--primary) 30%, transparent); }
-.edge-added .react-flow__edge-path { stroke: color-mix(in oklch, var(--added) 80%, transparent); stroke-width: 2; }
-.edge-removed .react-flow__edge-path { stroke: color-mix(in oklch, var(--removed) 70%, transparent); stroke-width: 2; stroke-dasharray: 5 4; }
-.edge-added.edge-faded .react-flow__edge-path { stroke: color-mix(in oklch, var(--added) 22%, transparent); }
-.edge-removed.edge-faded .react-flow__edge-path { stroke: color-mix(in oklch, var(--removed) 20%, transparent); }
+.edge-observed.edge-normal .react-flow__edge-path { stroke: var(--primary); opacity: 0.55; }
+.edge-added .react-flow__edge-path { stroke: var(--added); stroke-width: 2.2; opacity: 1; }
+.edge-removed .react-flow__edge-path { stroke: var(--removed); stroke-width: 2.2; opacity: 1; stroke-dasharray: 5 4; }
+.edge-added.edge-faded .react-flow__edge-path { opacity: 0.24; }
+.edge-removed.edge-faded .react-flow__edge-path { opacity: 0.22; }
 
 /* --------------------------------------------------------- react flow chrome */
-.react-flow__controls { border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px oklch(0 0 0 / 0.25); }
-.react-flow__controls-button { background: var(--card); border-bottom: 1px solid var(--border); fill: var(--foreground); color: var(--foreground); }
-.react-flow__controls-button:hover { background: var(--muted); }
+.react-flow__controls {
+  border-radius: var(--radius-md); overflow: hidden;
+  border: var(--w) solid var(--ink); box-shadow: var(--lift);
+}
+.react-flow__controls-button {
+  background: var(--paper-2); border-bottom: 1px solid var(--ink);
+  fill: var(--ink); color: var(--ink);
+}
+.react-flow__controls-button:last-child { border-bottom: 0; }
+.react-flow__controls-button:hover { background: var(--ink); color: var(--paper-2); fill: var(--paper-2); }
 .react-flow__controls-button svg { fill: currentColor; }
-.react-flow__minimap { border-radius: 14px; overflow: hidden; border: 1px solid var(--border); }
+.react-flow__minimap {
+  border-radius: var(--radius-md); overflow: hidden;
+  border: var(--w) solid var(--ink); box-shadow: var(--lift);
+}
 .react-flow__attribution { display: none; }
 
 /* ---------------------------------------------------------- playhead dots */
 .ph-dot { width: 22px; height: 22px; padding: 0; border: none; border-radius: 99px; background: transparent; cursor: pointer; position: relative; }
-.ph-dot::after { content: ""; position: absolute; inset: 7px; border-radius: 99px; background: color-mix(in oklch, var(--foreground) 18%, transparent); transition-property: background-color, box-shadow, scale; transition-duration: 0.2s; }
+.ph-dot::after {
+  content: ""; position: absolute; inset: 7px; border-radius: 99px;
+  background: var(--paper-3); border: 1px solid var(--ink);
+  transition-property: background-color, scale; transition-duration: 0.2s;
+}
 .ph-dot:hover::after { scale: 1.2; }
-.ph-dot.done::after { background: color-mix(in oklch, var(--primary) 55%, transparent); }
-.ph-dot.now::after { background: var(--primary); box-shadow: 0 0 10px color-mix(in oklch, var(--primary) 80%, transparent); }
+.ph-dot.done::after { background: color-mix(in srgb, var(--primary) 45%, var(--paper-2)); }
+.ph-dot.now::after { background: var(--primary); }
 
 /* ------------------------------------------------------------ landing */
 .landing-grid {
   background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1px);
   background-size: 22px 22px;
 }
+
+/* ------------------------------------------------------- printed surfaces
+   shadcn floats its surfaces on a 10% hairline ring, which simply disappears
+   against paper. Every one of them is printed instead the way the landing
+   page prints a card: paper, a 2px rule, and the offset lift. These sit
+   outside any layer so they win over the utility that set the ring.
+
+   Tooltips are left alone — they already invert to solid ink, which is
+   exactly right here.
+*/
+[data-slot="card"],
+[data-slot="popover-content"],
+[data-slot="dropdown-menu-content"],
+[data-slot="alert"] {
+  border: var(--w) solid var(--ink);
+  border-radius: var(--radius-md);
+  box-shadow: var(--lift);
+}
+
+/* A keycap is a small printed chip, not a shaded 3D key. */
+[data-slot="kbd"] {
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  box-shadow: none;
+}
+
+/* ---------------------------------------------------- segmented controls
+   shadcn rounds a joined toggle group and its end caps with two different
+   radii — rounded-md on a small group, rounded-lg on the caps — so the filled
+   segment bulges past the container's own corner. Worse, an item wrapped for a
+   tooltip is both :first-child and :last-child of that wrapper, so it collects
+   rounding on BOTH sides and the interior seam turns into a notch.
+
+   One radius, and rounding decided by position in the group rather than in
+   whatever wrapper the item happens to sit in.
+*/
+[data-slot="toggle-group"][data-spacing="0"] { border-radius: var(--radius-md); }
+[data-slot="toggle-group"][data-spacing="0"] [data-slot="toggle-group-item"] { border-radius: 0; }
+[data-slot="toggle-group"][data-spacing="0"] > :first-child,
+[data-slot="toggle-group"][data-spacing="0"] > :first-child [data-slot="toggle-group-item"] {
+  border-start-start-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-md);
+}
+[data-slot="toggle-group"][data-spacing="0"] > :last-child,
+[data-slot="toggle-group"][data-spacing="0"] > :last-child [data-slot="toggle-group-item"] {
+  border-start-end-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
+}
+
+/* --------------------------------------------------------- transport cluster
+   The three playhead buttons are one instrument, not three scattered targets,
+   so they are joined into a single control with shared rules between them.
+*/
+.transport { display: inline-flex; }
+.transport > button { border-radius: 0; margin-left: calc(var(--w) * -1); }
+.transport > button:first-child {
+  margin-left: 0;
+  border-start-start-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-md);
+}
+.transport > button:last-child {
+  border-start-end-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
+}
+.transport > button:hover:not(:disabled), .transport > button:focus-visible { position: relative; z-index: 1; }

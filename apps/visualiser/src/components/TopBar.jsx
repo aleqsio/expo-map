@@ -71,18 +71,18 @@ export default function TopBar({ manifest, mode, setMode, hasChanges, overlaid, 
           aria-label="View"
           className="shrink-0"
         >
-          <ToggleGroupItem value="map" aria-label="Map" className="data-[state=on]:bg-primary/12 data-[state=on]:text-primary">
+          <ToggleGroupItem value="map" aria-label="Map" className="data-[state=on]:bg-foreground data-[state=on]:text-background">
             <MapIcon data-icon="inline-start" aria-hidden="true" /> Map
           </ToggleGroupItem>
           <Tooltip>
             <TooltipTrigger asChild>
               <span>
-                <ToggleGroupItem value="changes" aria-label="Changes" disabled={!hasChanges} className="data-[state=on]:bg-changed/15 data-[state=on]:text-changed">
+                <ToggleGroupItem value="changes" aria-label="Changes" disabled={!hasChanges} className="data-[state=on]:bg-changed data-[state=on]:text-background">
                   <GitCompareArrows data-icon="inline-start" aria-hidden="true" /> Changes
                 </ToggleGroupItem>
               </span>
             </TooltipTrigger>
-            {!hasChanges && <TooltipContent>Open an .appmapdiff to review a PR</TooltipContent>}
+            {!hasChanges && <TooltipContent>Open a .diff.scrmap to review a PR</TooltipContent>}
           </Tooltip>
         </ToggleGroup>
 
@@ -111,7 +111,7 @@ export default function TopBar({ manifest, mode, setMode, hasChanges, overlaid, 
               <label className="cursor-pointer">
                 <input
                   type="file"
-                  accept=".appmap,.appmapdiff,.zip"
+                  accept=".scrmap,.diff.scrmap,.zip"
                   className="sr-only"
                   onChange={async (e) => {
                     const f = e.target.files?.[0]
@@ -124,7 +124,7 @@ export default function TopBar({ manifest, mode, setMode, hasChanges, overlaid, 
               </label>
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Open an .appmap or .appmapdiff — or drop one anywhere</TooltipContent>
+          <TooltipContent>Open a .scrmap or .diff.scrmap — or drop one anywhere</TooltipContent>
         </Tooltip>
         {hasChanges && (
           <Tooltip>

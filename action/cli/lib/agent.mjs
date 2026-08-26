@@ -2,7 +2,7 @@
 // reach. Provider-agnostic — the contract is file-based (the agent writes
 // captures, flows, notes.json and summary.json to the paths we hand it), so
 // any agentic CLI that can run shell commands fills the slot. Layered
-// guidance: the generic expo-map skill + the repo's own .appmap/SKILL.md.
+// guidance: the generic expo-map skill + the repo's own .screenmap/SKILL.md.
 // Budgeted, side-effect-free (writes only into the given out dirs), and it
 // reports what it recorded so the baseline job can open a flows PR.
 import { spawnSync } from 'node:child_process'
@@ -60,7 +60,7 @@ export function resolveProvider(config) {
   }
   const name = process.env.AGENT_PROVIDER || config.agent.provider || 'claude'
   const preset = PROVIDERS[name]
-  if (!preset) return { name, error: `unknown agent provider "${name}" (${Object.keys(PROVIDERS).join(' | ')} or agent.command in .appmap/config.json)` }
+  if (!preset) return { name, error: `unknown agent provider "${name}" (${Object.keys(PROVIDERS).join(' | ')} or agent.command in .screenmap/config.json)` }
   return { name, ...preset, keyEnv: config.agent.keyEnv ?? preset.keyEnv }
 }
 
@@ -89,7 +89,7 @@ export function agentInfo(config) {
 export function runAgent({ projectDir, config, screens, scheme, udid, bundleId, outScreensDir, outFlowsDir, notesPath, summaryPath, mode, prContext }) {
   const info = agentInfo(config)
   if (!screens.length) return { ran: false, reason: 'nothing to explore', ...info }
-  if (!config.agent.enabled) return { ran: false, reason: 'agent disabled in .appmap/config.json', ...info }
+  if (!config.agent.enabled) return { ran: false, reason: 'agent disabled in .screenmap/config.json', ...info }
   const provider = resolveProvider(config)
   if (provider.error) return { ran: false, reason: provider.error, ...info }
   const env = providerEnv(provider)
@@ -104,7 +104,7 @@ export function runAgent({ projectDir, config, screens, scheme, udid, bundleId, 
   const prompt = `You are running the expo-map skill's capture phases headlessly in CI (no simulator MCP — use \`xcrun simctl\` for deep links/screenshots and the \`argent\` CLI for taps/swipes: \`argent run <tool> …\` (\`argent tools\` lists them; if \`argent\` is not on PATH, run \`npx -y @swmansion/argent@0.21.0\` from a directory OUTSIDE the project, e.g. /tmp, because this repo's devEngines pin breaks npx inside it)). The app is already running on simulator ${udid} (bundle ${bundleId}, scheme ${scheme}://), Metro is up. Do not rebuild, reinstall, or checkout anything.
 
 Read the skill at ${SKILL_DIR}/SKILL.md for conventions (capture naming, flow recording format, safety rules: never tap destructive/purchase/sign-out controls, never record credentials). The project lives at ${projectDir}. All output paths below are absolute — write to them exactly.
-${repoSkillText ? `\nProject-specific guidance (.appmap/SKILL.md) — follow it:\n---\n${repoSkillText}\n---\n` : ''}
+${repoSkillText ? `\nProject-specific guidance (.screenmap/SKILL.md) — follow it:\n---\n${repoSkillText}\n---\n` : ''}
 Task (${mode}): for EACH of these screens, capture the screen and record a replayable navigation flow.
 ${budgeted.map((s) => `- ${s.id}  urlPath=${s.urlPath}  slug=${s.slug}  deepLink=${s.deepLink}  file=${s.file ?? '?'}${s.reason ? `  why=${s.reason}` : ''}`).join('\n')}
 
@@ -120,11 +120,11 @@ Rules:
   let r
   if (provider.custom) {
     // custom command template: {promptFile} is substituted; the prompt is also
-    // exposed as $APPMAP_PROMPT_FILE for templates that prefer the env var
+    // exposed as $SCREENMAP_PROMPT_FILE for templates that prefer the env var
     const promptFile = path.join(path.dirname(summaryPath), 'prompt.md')
     fs.writeFileSync(promptFile, prompt)
     const cmd = provider.custom.replaceAll('{promptFile}', promptFile)
-    r = spawnSync('bash', ['-c', cmd], { cwd: projectDir, encoding: 'utf8', env: { ...env, APPMAP_PROMPT_FILE: promptFile }, maxBuffer: 64 * 1024 * 1024 })
+    r = spawnSync('bash', ['-c', cmd], { cwd: projectDir, encoding: 'utf8', env: { ...env, SCREENMAP_PROMPT_FILE: promptFile }, maxBuffer: 64 * 1024 * 1024 })
   } else {
     const args = provider.args({ prompt, model: config.agent.model, projectDir })
     r = spawnSync(provider.bin, args, { cwd: projectDir, encoding: 'utf8', env, maxBuffer: 64 * 1024 * 1024 })

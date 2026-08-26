@@ -12,8 +12,8 @@ import { flowForNode, replayCommand } from '../lib/replay'
 const nodeTypes = { screen: ScreenNode }
 
 // ?shot — headless-screenshot mode: no chrome, no comparator flip (head side
-// frozen), viewport fitted to the changed nodes; window.__appmapShotReady
-// flips when the frame is worth capturing. Used by appmap-ci to render the
+// frozen), viewport fitted to the changed nodes; window.__screenmapShotReady
+// flips when the frame is worth capturing. Used by screenmap-ci to render the
 // PR-comment image.
 const SHOT = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('shot')
 
@@ -96,10 +96,12 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
     layoutGraph(map.nodes, [...map.edges, ...observedEdges]).then(setPositions)
   }, [map, observedEdges])
 
-  // neighbours mode: the subject screen + everything one action away
+  // The subject screen + everything one action away. Computed whether or not
+  // the lens is on, because the control that turns it on has to name the count
+  // before you commit to it.
   const subjectId = selectedNode ?? flow?.route ?? null
-  const neighbourhood = useMemo(() => {
-    if (!neighboursMode || !subjectId) return null
+  const neighbourSet = useMemo(() => {
+    if (!subjectId) return null
     const nodes = new Set([subjectId])
     const edgeKeys = new Set()
     for (const e of [...map.edges, ...observedEdges]) {
@@ -108,7 +110,11 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
       edgeKeys.add(`${e.from}→${e.to}`)
     }
     return { nodes, edgeKeys }
-  }, [neighboursMode, subjectId, map, observedEdges])
+  }, [subjectId, map, observedEdges])
+  // The lens. Null unless the mode is on, so everything downstream keeps
+  // reading `neighbourhood ? ...` as "am I in neighbours mode".
+  const neighbourhood = neighboursMode ? neighbourSet : null
+  const neighbourCount = (neighbourSet?.nodes.size ?? 1) - 1
 
   useEffect(() => {
     if (!neighbourhood) return
@@ -177,6 +183,17 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
     [manifest]
   )
 
+  const copyDeepLink = useCallback(
+    (url) => {
+      if (!url) return toast('No deep link recorded for this screen')
+      navigator.clipboard.writeText(url).then(
+        () => toast.success('Copied deep link'),
+        () => setCommandSheet({ flow: { name: 'deep link' }, heading: 'Deep link', cmd: url })
+      )
+    },
+    []
+  )
+
   // focus a node by panning/zooming straight to its layout position
   const focusNode = useCallback(
     (id) => {
@@ -221,10 +238,10 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
         if (subject.length) {
           const tl = flowToScreenPosition({ x: Math.min(...subject.map((p) => p.x)), y: Math.min(...subject.map((p) => p.y)) })
           const br = flowToScreenPosition({ x: Math.max(...subject.map((p) => p.x)) + NODE_W, y: Math.max(...subject.map((p) => p.y)) + NODE_H })
-          window.__appmapShotBounds = { x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y }
+          window.__screenmapShotBounds = { x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y }
         }
-        window.__appmapShotReady = true
-        document.title = 'appmap-shot-ready'
+        window.__screenmapShotReady = true
+        document.title = 'screenmap-shot-ready'
       }, 1200)
     }, 400)
     return () => clearTimeout(t)
@@ -386,22 +403,12 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
     if (st.action === 'swipe') return `swipe ${st.from?.join(',')} → ${st.to?.join(',')}`
     return st.action
   }
-  const playheadToggles = flow ? (() => {
-    const nav = map.flows.find((f) => f.route === flow.route && f.name.startsWith('nav-'))
+  // Every visit-* flow in a bundle is exactly one open_url step, so a deep link
+  // was never something to play — it is a URL. Surface it as one.
+  const deepLinkUrl = flow ? (() => {
     const visit = map.flows.find((f) => f.route === flow.route && f.name.startsWith('visit-'))
-    const isVisit = flow.name.startsWith('visit-')
-    const options = []
-    if (nav || !isVisit) options.push({ value: 'navigate', label: 'navigate' })
-    if (visit) options.push({ value: 'deeplink', label: 'deep link' })
-    options.push({ value: 'neighbours', label: 'neighbours' })
-    const value = neighboursMode ? 'neighbours' : isVisit ? 'deeplink' : 'navigate'
-    const pick = (f) => { setNeighboursMode(false); setSelectedFlow(f.name); setStep(Math.max(0, (f.steps?.length ?? 1) - 1)) }
-    const onChange = (v) => {
-      if (v === 'neighbours') setNeighboursMode(true)
-      else if (v === 'navigate' && nav) pick(nav)
-      else if (v === 'deeplink' && visit) pick(visit)
-    }
-    return { options, value, onChange }
+    const from = (f) => (f?.steps ?? []).find((st) => st.action === 'open_url' && st.url)?.url ?? null
+    return from(visit) ?? from(flow)
   })() : null
 
   return (
@@ -452,9 +459,13 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
           pannable
           zoomable
           onClick={(_, pos) => setCenter(pos.x, pos.y, { duration: 400, zoom: Math.max(getZoom(), 0.55) })}
-          nodeColor={(n) => (n.data?.diff ? `var(--${n.data.diff.status === 'A' ? 'added' : n.data.diff.status === 'D' ? 'removed' : 'changed'})` : `hsl(${n.data?.hue ?? 220} 55% 50%)`)}
-          maskColor="color-mix(in oklch, var(--background) 82%, transparent)"
-          bgColor="color-mix(in oklch, var(--card) 92%, transparent)"
+          /* Ink, not a rainbow: the minimap is a printed thumbnail of the map,
+             so it uses the press's own colours. Group hue stays on the node
+             labels, where it can carry the grouping without shouting. The diff
+             plate is kept — those three colours mean something. */
+          nodeColor={(n) => (n.data?.diff ? `var(--${n.data.diff.status === 'A' ? 'added' : n.data.diff.status === 'D' ? 'removed' : 'changed'})` : 'var(--ink)')}
+          maskColor="color-mix(in srgb, var(--paper) 78%, transparent)"
+          bgColor="var(--paper-2)"
         />}
       </ReactFlow>
 
@@ -481,10 +492,14 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
 
       {flow && stepView && (
         <Playhead
-          title={neighboursMode ? `Neighbours of ${routeById[subjectId]?.urlPath ?? subjectId}` : flow.title ?? flow.name}
+          title={flow.title ?? flow.name}
+          subjectPath={routeById[subjectId]?.urlPath ?? subjectId}
           neighbours={neighboursMode}
-          neighbourCount={(neighbourhood?.nodes.size ?? 1) - 1}
-          toggles={playheadToggles}
+          neighbourCount={neighbourCount}
+          onShowNeighbours={() => setNeighboursMode(true)}
+          onExitNeighbours={() => setNeighboursMode(false)}
+          deepLinkUrl={deepLinkUrl}
+          onCopyDeepLink={() => copyDeepLink(deepLinkUrl)}
           pos={stepView.pos}
           total={stepView.visibleIdx.length}
           onReplay={() => setStep(stepView.effectiveEnd(0))}
@@ -520,6 +535,7 @@ export default function Graph({ bundle, mode, setMode, hasChanges, overlaid, onO
       {commandSheet && (
         <CommandSheet
           title={commandSheet.flow.title ?? commandSheet.flow.name}
+          heading={commandSheet.heading}
           cmd={commandSheet.cmd}
           onCopy={() => navigator.clipboard.writeText(commandSheet.cmd).then(() => { toast.success('Copied'); setCommandSheet(null) }, () => toast('Select the text and copy manually'))}
           onClose={() => setCommandSheet(null)}

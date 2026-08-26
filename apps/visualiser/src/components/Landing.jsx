@@ -27,8 +27,8 @@ export default function Landing({ onOpenBuffer, onLoadDemo, demoAvailable, busy,
             <Wordmark className="[&_svg]:size-7 [&>span]:text-2xl" />
             <p className="text-pretty text-[15px] leading-relaxed text-muted-foreground">
               Every screen of your app as a map — real screenshots, the links between them, and replayable flows.
-              Drop an <span className="font-mono text-foreground">.appmap</span> to explore it, or an{' '}
-              <span className="font-mono text-foreground">.appmapdiff</span> to review what a pull request changed.
+              Drop a <span className="font-mono text-foreground">.scrmap</span> to explore it, or a{' '}
+              <span className="font-mono text-foreground">.diff.scrmap</span> to review what a pull request changed.
             </p>
           </div>
 
@@ -41,7 +41,7 @@ export default function Landing({ onOpenBuffer, onLoadDemo, demoAvailable, busy,
           >
             <input
               type="file"
-              accept=".appmap,.appmapdiff,.zip"
+              accept=".scrmap,.diff.scrmap,.zip"
               className="sr-only"
               onChange={async (e) => {
                 const f = e.target.files?.[0]

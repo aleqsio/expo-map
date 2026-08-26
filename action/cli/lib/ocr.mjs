@@ -12,7 +12,7 @@ let binPath = null
 export function ocrAvailable() {
   if (binPath) return true
   if (process.platform !== 'darwin') return false
-  const dir = path.join(os.homedir(), '.cache', 'appmap-ci')
+  const dir = path.join(os.homedir(), '.cache', 'screenmap-ci')
   fs.mkdirSync(dir, { recursive: true })
   const bin = path.join(dir, `ocr-${fs.statSync(SRC).size}`)
   if (!fs.existsSync(bin)) {

@@ -1,34 +1,34 @@
-# appmap in CI
+# screenmap in CI
 
 The GitHub Action reviews every pull request's screens without re-mapping the
 whole app. Three ideas carry it:
 
-1. **Committed flows are the source of truth.** `.appmap/flows/*.yaml` (+ `.meta.json`)
+1. **Committed flows are the source of truth.** `.screenmap/flows/*.yaml` (+ `.meta.json`)
    live in the app repo and are reviewed like code. A screen with a committed flow is
    captured by headless `argent flow run` — deterministic, no LLM, seconds.
-2. **The baseline map is a cache.** The full `.appmap` of `main` is built once and
+2. **The baseline map is a cache.** The full `.scrmap` of `main` is built once and
    refreshed incrementally on every push; a PR run captures only the *head side of its
    suspect screens* — base-side screenshots come from the baseline.
 3. **The agent fills gaps, then retires.** A headless coding agent (Claude Code by
    default — see [AI providers](#ai-providers)) runs only for screens with no
-   flow, guided by the repo's `.appmap/SKILL.md`, under a per-run budget. On PRs its
+   flow, guided by the repo's `.screenmap/SKILL.md`, under a per-run budget. On PRs its
    output is ephemeral (captures in the bundle, flows in the artifact). After the
    feature merges, the baseline job records flows for the new screens and opens a
    **flows PR against `main`**; once merged, those screens replay for free.
 
 ```
-PR opened ──▶ restore baseline (appmaps branch) ──▶ static parse + suspects ──▶ per suspect:
+PR opened ──▶ restore baseline (screenmaps branch) ──▶ static parse + suspects ──▶ per suspect:
                                                                                committed flow? ──yes──▶ argent replay (teal)
                                                                                                ──no───▶ agent explores (violet, budgeted)
-             base-side screenshots reused ──────────────────────────────────▶ head captures + notes ──▶ pack .appmapdiff
-                                                                                                     ──▶ publish (appmaps branch + artifact)
+             base-side screenshots reused ──────────────────────────────────▶ head captures + notes ──▶ pack .diff.scrmap
+                                                                                                     ──▶ publish (screenmaps branch + artifact)
                                                                                                      ──▶ sticky PR comment → ?map=…&changes=…
 ```
 
 ## Install
 
 1. Add the two workflows from [`action/templates/`](../action/templates/) to
-   `.github/workflows/` (`appmap-pr.yml`, `appmap-baseline.yml`).
+   `.github/workflows/` (`screenmap-pr.yml`, `screenmap-baseline.yml`).
 2. Wire up the dev client. **The Action owns no build pipeline.** Either:
    - **EAS (default):** link the project (`npx eas init`), add an `eas.json` profile
      like `"development-simulator": { "developmentClient": true, "distribution":
@@ -42,12 +42,12 @@ PR opened ──▶ restore baseline (appmaps branch) ──▶ static parse + s
 3. Optionally add an API key secret and pass it as `agent_api_key` — without it the
    Action runs deterministic-only (deep links + committed flows, no exploration, no
    notes). Claude Code is the default agent; see [AI providers](#ai-providers).
-4. Commit `.appmap/config.json` (scheme, device, waits — see the template) and, if
-   you want the agent to behave, `.appmap/SKILL.md` (auth, real params, forbidden
+4. Commit `.screenmap/config.json` (scheme, device, waits — see the template) and, if
+   you want the agent to behave, `.screenmap/SKILL.md` (auth, real params, forbidden
    controls, timing). Both are optional.
 5. Run the baseline workflow once (`workflow_dispatch`) so PRs have something to
-   diff against. It publishes `main/<sha>.appmap` + `main/latest.appmap` to an
-   orphan `appmaps` branch.
+   diff against. It publishes `main/<sha>.scrmap` + `main/latest.scrmap` to an
+   orphan `screenmaps` branch.
 
 Requirements: a macOS runner (`macos-26` recommended — the app only *runs* there, so
 the runner needs simulators, not a blessed Xcode toolchain), `expo-dev-client` in the
@@ -58,13 +58,13 @@ on one EAS build (queue + build time).
 
 | Step | Lane | Notes |
 | --- | --- | --- |
-| Restore baseline for the PR base SHA (or `latest`) | — | from the `appmaps` branch |
+| Restore baseline for the PR base SHA (or `latest`) | — | from the `screenmaps` branch |
 | `parse-routes` on head, `diff-map suspects` vs baseline graph | deterministic | same suspect logic as `/expo-map pr` |
 | Copy base-side screenshots of suspects from the baseline | deterministic | nothing is captured twice |
 | Replay committed flows for suspects (`argent flow run`, fragments around capture points) | deterministic | **self-checked**: the replay's end screen must resemble the route's deep-link capture (pixelmatch ≥ 0.45); otherwise the flow is marked *drifted*, the deep-link capture is used, the app is relaunched, and the flow is queued for re-recording |
 | Deep-link the rest | deterministic | `xcrun simctl openurl` + screenshot |
 | Explore screens with no flow | agent (budgeted) | writes captures, flows, `notes.json` (per-screen "what changed", `unaffected` verdicts) |
-| `diff-map pack` → `.appmapdiff` | deterministic | per-state statuses, dismissed suspects |
+| `diff-map pack` → `.diff.scrmap` | deterministic | per-state statuses, dismissed suspects |
 | Publish + sticky comment | — | `?map=<baseline-url>&changes=<diff-url>` opens the hosted visualiser preloaded |
 
 Private repos: raw GitHub URLs aren't anonymously readable, so set `publish: "false"`
@@ -72,17 +72,17 @@ and the comment links the workflow artifact (download, drop into the visualiser)
 
 ## Running it locally
 
-The Action is a thin wrapper around `action/cli/appmap-ci.mjs`, which runs against
+The Action is a thin wrapper around `action/cli/screenmap-ci.mjs`, which runs against
 your own simulator:
 
 ```bash
 cd action/cli && npm install
 # full baseline of the current checkout (agent if its provider's key is set)
-node appmap-ci.mjs baseline --project ~/app --out /tmp/main.appmap
+node screenmap-ci.mjs baseline --project ~/app --out /tmp/main.scrmap
 # a PR diff: checkout the head, point at the baseline, name the base commit
-node appmap-ci.mjs pr --project ~/app --baseline /tmp/main.appmap --base <sha> --pr 42 --title "…" --out /tmp/pr42.appmapdiff
+node screenmap-ci.mjs pr --project ~/app --baseline /tmp/main.scrmap --base <sha> --pr 42 --title "…" --out /tmp/pr42.diff.scrmap
 # preview the comment
-node appmap-ci.mjs comment --summary ~/app/.expo-map/ci/pr/summary.json --map-url … --changes-url …
+node screenmap-ci.mjs comment --summary ~/app/.expo-map/ci/pr/summary.json --map-url … --changes-url …
 ```
 
 `--only id,id`, `--limit N`, `--no-agent`, `--no-sim` (static only) help while iterating.
@@ -104,13 +104,13 @@ agentic CLI that can run shell commands fills the slot.
 Pass the key as the `agent_api_key` input — the CLI maps it onto whichever env var
 the provider expects (an explicitly-set env var wins). The Action installs the
 chosen CLI on demand. Locally, `AGENT_PROVIDER` + the provider's own env var work
-the same way. For anything else, set in `.appmap/config.json`:
+the same way. For anything else, set in `.screenmap/config.json`:
 
 ```json
 "agent": { "command": "myagent --prompt-file {promptFile}", "keyEnv": "MYAGENT_API_KEY" }
 ```
 
-`{promptFile}` (also `$APPMAP_PROMPT_FILE`) is a markdown file with the full task;
+`{promptFile}` (also `$SCREENMAP_PROMPT_FILE`) is a markdown file with the full task;
 the command runs via bash in the project directory and must be preinstalled by your
 workflow. `agent.provider` in the same file sets the preset without touching the
 workflow yaml. The prompt itself is identical across providers — quality varies
@@ -120,10 +120,10 @@ with the model driving it, and only Claude Code has been dogfooded end to end.
 
 | Path | Who | What |
 | --- | --- | --- |
-| `.appmap/SKILL.md` | agent | app-specific guidance (template in `action/templates/APPMAP_SKILL.md`) |
-| `.appmap/config.json` | deterministic | scheme, device, waits, suspect depth, agent budget, sample params |
-| `.appmap/flows/` | both | committed argent flows; the flows PR adds to it |
-| `appmaps` branch | Action | `main/<sha>.appmap`, `main/latest.appmap`, `pr-<n>/<sha>.appmapdiff` — SHA-pinned raw URLs |
+| `.screenmap/SKILL.md` | agent | app-specific guidance (template in `action/templates/SCREENMAP_SKILL.md`) |
+| `.screenmap/config.json` | deterministic | scheme, device, waits, suspect depth, agent budget, sample params |
+| `.screenmap/flows/` | both | committed argent flows; the flows PR adds to it |
+| `screenmaps` branch | Action | `main/<sha>.scrmap`, `main/latest.scrmap`, `pr-<n>/<sha>.diff.scrmap` — SHA-pinned raw URLs |
 | `eas.json` | EAS lane | the simulator dev-client profile (`eas_profile`, default `development-simulator`) |
 | EAS build history | EAS lane | acts as the dev-client cache, keyed by `@expo/fingerprint` — no actions/cache |
 | workflow artifact | Action | bundle + `summary.json` (90 days) |

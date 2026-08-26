@@ -1,4 +1,4 @@
-# Marketplace metadata: must live at the repo root; "appmap" alone would
+# Marketplace metadata: must live at the repo root; a bare name would
 # collide with AppLand's AppMap listing, hence the repo-matching name.
 name: expo-map
 description: >-
@@ -19,7 +19,7 @@ inputs:
     description: Path to the Expo project (repo-relative)
     default: "."
   agent_provider:
-    description: "Agent CLI for screens with no committed flow: claude (default) | codex | gemini | opencode. Or set agent.command in .appmap/config.json to run any CLI."
+    description: "Agent CLI for screens with no committed flow: claude (default) | codex | gemini | opencode. Or set agent.command in .screenmap/config.json to run any CLI."
     default: ""
   agent_api_key:
     description: API key for the chosen agent provider (mapped to the env var it expects). Leave empty for deterministic-only runs.
@@ -27,15 +27,15 @@ inputs:
   agent_max_screens:
     description: Cap on screens the agent may explore per run
     default: "8"
-  appmaps_branch:
+  screenmaps_branch:
     description: Orphan branch that stores baseline maps and per-PR change bundles
-    default: appmaps
+    default: screenmaps
   publish:
-    description: "Publish bundles to the appmaps branch so the comment can deep-link the hosted visualiser (requires contents: write). Set false for private repos if you only want the artifact."
+    description: "Publish bundles to the screenmaps branch so the comment can deep-link the hosted visualiser (requires contents: write). Set false for private repos if you only want the artifact."
     default: "true"
   viewer_url:
     description: Hosted visualiser origin used in comment links
-    default: https://appmap-visualiser.vercel.app
+    default: https://app.screenmap.dev
   simulator:
     description: Simulator device name to boot (falls back to any available iPhone)
     default: iPhone 17 Pro
@@ -52,12 +52,12 @@ inputs:
     description: "(baseline) Open a PR against the default branch with flows the agent recorded"
     default: "true"
   github_token:
-    description: Token for comments, appmaps-branch pushes and flows PRs
+    description: Token for comments, screenmaps-branch pushes and flows PRs
     default: ${{ github.token }}
 
 outputs:
   bundle:
-    description: Path of the produced .appmap / .appmapdiff
+    description: Path of the produced .scrmap / .diff.scrmap
     value: ${{ steps.run.outputs.bundle }}
   summary:
     description: Path of the run summary JSON
@@ -72,18 +72,18 @@ runs:
     - name: Check runner
       shell: bash
       run: |
-        if [ "$(uname)" != "Darwin" ]; then echo "::error::appmap needs a macOS runner (iOS simulator)"; exit 1; fi
+        if [ "$(uname)" != "Darwin" ]; then echo "::error::screenmap needs a macOS runner (iOS simulator)"; exit 1; fi
         if [ -z "${{ inputs.app_path }}${{ inputs.expo_token }}" ]; then
           echo "::error::provide expo_token (EAS builds the dev client) or app_path (bring your own build)"; exit 1
         fi
         xcrun simctl list devices available | head -20
 
-    - name: Install appmap-ci
+    - name: Install screenmap-ci
       shell: bash
       run: |
         cd "${{ github.action_path }}/action/cli" && npm ci --silent || npm install --silent
         echo "${{ github.action_path }}/action/cli" >> "$GITHUB_PATH"
-        ln -sfn "${{ github.action_path }}/action/cli/appmap-ci.mjs" "${{ github.action_path }}/action/cli/appmap-ci"
+        ln -sfn "${{ github.action_path }}/action/cli/screenmap-ci.mjs" "${{ github.action_path }}/action/cli/screenmap-ci"
         npm install -g @swmansion/argent@0.21.0 --silent   # headless flow replay
 
     - name: Install project dependencies
@@ -115,8 +115,8 @@ runs:
           echo "using provided dev client: $app"
         else
           command -v eas >/dev/null || npm install -g eas-cli --silent
-          appmap-ci resolve-app --project "${{ inputs.project }}" --profile "${{ inputs.eas_profile }}" | tee /tmp/appmap-app.json
-          app=$(python3 -c 'import json,sys;print(json.load(open("/tmp/appmap-app.json"))["appPath"])')
+          screenmap-ci resolve-app --project "${{ inputs.project }}" --profile "${{ inputs.eas_profile }}" | tee /tmp/screenmap-app.json
+          app=$(python3 -c 'import json,sys;print(json.load(open("/tmp/screenmap-app.json"))["appPath"])')
         fi
         echo "app=$app" >> "$GITHUB_OUTPUT"
 
@@ -127,27 +127,27 @@ runs:
         GH_TOKEN: ${{ inputs.github_token }}
       run: |
         set -e
-        mkdir -p .appmap-ci
+        mkdir -p .screenmap-ci
         # prefer the baseline published for the PR base SHA; fall back to latest
         base_sha="${{ github.event.pull_request.base.sha }}"
-        branch="${{ inputs.appmaps_branch }}"
+        branch="${{ inputs.screenmaps_branch }}"
         if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
           git fetch --depth 1 origin "$branch":refs/remotes/origin/"$branch"
           pick=""
           [ -n "$base_sha" ] && pick=$(git ls-tree --name-only -r origin/$branch | grep "^main/${base_sha:0:7}" | head -1 || true)
-          [ -z "$pick" ] && pick=$(git ls-tree --name-only -r origin/$branch | grep '^main/latest.appmap$' | head -1 || true)
-          if [ -n "$pick" ]; then git show "origin/$branch:$pick" > .appmap-ci/baseline.appmap; echo "found=true" >> "$GITHUB_OUTPUT"; echo "baseline: $pick"; fi
+          [ -z "$pick" ] && pick=$(git ls-tree --name-only -r origin/$branch | grep '^main/latest.scrmap$' | head -1 || true)
+          if [ -n "$pick" ]; then git show "origin/$branch:$pick" > .screenmap-ci/baseline.scrmap; echo "found=true" >> "$GITHUB_OUTPUT"; echo "baseline: $pick"; fi
         fi
-        [ -f .appmap-ci/baseline.appmap ] || echo "found=false" >> "$GITHUB_OUTPUT"
+        [ -f .screenmap-ci/baseline.scrmap ] || echo "found=false" >> "$GITHUB_OUTPUT"
 
-    - name: Run appmap-ci
+    - name: Run screenmap-ci
       id: run
       shell: bash
       env:
         AGENT_PROVIDER: ${{ inputs.agent_provider }}
         AGENT_MAX_SCREENS: ${{ inputs.agent_max_screens }}
         AGENT_API_KEY: ${{ inputs.agent_api_key }}
-        APPMAP_APP_PATH: ${{ steps.app.outputs.app }}
+        SCREENMAP_APP_PATH: ${{ steps.app.outputs.app }}
         GH_TOKEN: ${{ inputs.github_token }}
       run: |
         set -e
@@ -163,37 +163,37 @@ runs:
           if [ -n "$bin" ] && ! command -v "$bin" >/dev/null; then npm install -g "$pkg" --silent; fi
         fi
         proj="${{ inputs.project }}"
-        mkdir -p "$proj/.appmap" && [ -f "$proj/.appmap/config.json" ] || true
+        mkdir -p "$proj/.screenmap" && [ -f "$proj/.screenmap/config.json" ] || true
         if [ "${{ inputs.mode }}" = "pr" ]; then
           if [ "${{ steps.baseline.outputs.found }}" != "true" ]; then
-            echo "::warning::no baseline map found on ${{ inputs.appmaps_branch }} — run the baseline workflow on main first; building a one-off baseline of the base commit is not supported yet"
+            echo "::warning::no baseline map found on ${{ inputs.screenmaps_branch }} — run the baseline workflow on main first; building a one-off baseline of the base commit is not supported yet"
             echo "bundle=" >> "$GITHUB_OUTPUT"; exit 0
           fi
           git fetch --depth 1 origin "${{ github.event.pull_request.base.sha }}" || true
-          appmap-ci pr --project "$proj" --baseline .appmap-ci/baseline.appmap \
+          screenmap-ci pr --project "$proj" --baseline .screenmap-ci/baseline.scrmap \
             --base "${{ github.event.pull_request.base.sha }}" --head "${{ github.event.pull_request.head.sha }}" \
             --pr "${{ github.event.pull_request.number }}" --title "${{ github.event.pull_request.title }}" --url "${{ github.event.pull_request.html_url }}" \
-            --base-ref "${{ github.event.pull_request.base.ref }}" --head-ref "${{ github.event.pull_request.head.ref }}" > .appmap-ci/summary.json
+            --base-ref "${{ github.event.pull_request.base.ref }}" --head-ref "${{ github.event.pull_request.head.ref }}" > .screenmap-ci/summary.json
         else
-          appmap-ci baseline --project "$proj" $( [ "${{ steps.baseline.outputs.found }}" = "true" ] && echo "--previous .appmap-ci/baseline.appmap" ) > .appmap-ci/summary.json
+          screenmap-ci baseline --project "$proj" $( [ "${{ steps.baseline.outputs.found }}" = "true" ] && echo "--previous .screenmap-ci/baseline.scrmap" ) > .screenmap-ci/summary.json
         fi
-        bundle=$(python3 -c 'import json;print(json.load(open(".appmap-ci/summary.json"))["bundle"])')
+        bundle=$(python3 -c 'import json;print(json.load(open(".screenmap-ci/summary.json"))["bundle"])')
         echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
-        echo "summary=.appmap-ci/summary.json" >> "$GITHUB_OUTPUT"
+        echo "summary=.screenmap-ci/summary.json" >> "$GITHUB_OUTPUT"
 
     - name: Render comment image
       if: inputs.mode == 'pr' && steps.run.outputs.bundle != ''
       shell: bash
       run: |
-        appmap-ci shot --map .appmap-ci/baseline.appmap --changes "${{ steps.run.outputs.bundle }}" \
-          --out .appmap-ci/shot.png --viewer "${{ inputs.viewer_url }}" \
+        screenmap-ci shot --map .screenmap-ci/baseline.scrmap --changes "${{ steps.run.outputs.bundle }}" \
+          --out .screenmap-ci/shot.png --viewer "${{ inputs.viewer_url }}" \
           || echo "::warning::comment image failed — continuing without it"
 
     - name: Upload diagnostics (failure)
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: appmap-diagnostics-${{ github.run_id }}
+        name: screenmap-diagnostics-${{ github.run_id }}
         path: ${{ inputs.project }}/.expo-map/ci/diag
         retention-days: 7
         if-no-files-found: ignore
@@ -202,13 +202,13 @@ runs:
       if: steps.run.outputs.bundle != ''
       uses: actions/upload-artifact@v4
       with:
-        name: appmap-${{ inputs.mode }}-${{ github.run_id }}
+        name: screenmap-${{ inputs.mode }}-${{ github.run_id }}
         path: |
           ${{ steps.run.outputs.bundle }}
-          .appmap-ci/summary.json
+          .screenmap-ci/summary.json
         retention-days: 90
 
-    - name: Publish to appmaps branch
+    - name: Publish to screenmaps branch
       id: publish
       if: steps.run.outputs.bundle != '' && inputs.publish == 'true'
       shell: bash
@@ -218,24 +218,24 @@ runs:
         set -e
         bundle="${{ steps.run.outputs.bundle }}"
         if [ "${{ inputs.mode }}" = "pr" ]; then
-          dest="pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}.appmapdiff"
+          dest="pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}.diff.scrmap"
           files="$bundle=$dest"
           shot_dest="pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}.png"
-          [ -f .appmap-ci/shot.png ] && files="$files,.appmap-ci/shot.png=$shot_dest"
-          out=$(appmap-ci publish --repo "${{ github.repository }}" --branch "${{ inputs.appmaps_branch }}" --files "$files" --message "pr #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}")
+          [ -f .screenmap-ci/shot.png ] && files="$files,.screenmap-ci/shot.png=$shot_dest"
+          out=$(screenmap-ci publish --repo "${{ github.repository }}" --branch "${{ inputs.screenmaps_branch }}" --files "$files" --message "pr #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}")
           changes_url=$(echo "$out" | python3 -c "import json,sys;print(json.load(sys.stdin)['urls']['$dest'])")
           shot_url=$(echo "$out" | python3 -c "import json,sys;print(json.load(sys.stdin)['urls'].get('$shot_dest',''))")
           echo "shot_url=$shot_url" >> "$GITHUB_OUTPUT"
           # the baseline this diff was computed against, so the viewer gets the backdrop
           base_sha="${{ github.event.pull_request.base.sha }}"
-          map_url="https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse origin/${{ inputs.appmaps_branch }})/main/${base_sha:0:7}.appmap"
-          git ls-tree --name-only -r origin/${{ inputs.appmaps_branch }} | grep -q "^main/${base_sha:0:7}.appmap$" || map_url="https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse origin/${{ inputs.appmaps_branch }})/main/latest.appmap"
+          map_url="https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse origin/${{ inputs.screenmaps_branch }})/main/${base_sha:0:7}.scrmap"
+          git ls-tree --name-only -r origin/${{ inputs.screenmaps_branch }} | grep -q "^main/${base_sha:0:7}.scrmap$" || map_url="https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse origin/${{ inputs.screenmaps_branch }})/main/latest.scrmap"
           echo "changes_url=$changes_url" >> "$GITHUB_OUTPUT"; echo "map_url=$map_url" >> "$GITHUB_OUTPUT"
           echo "viewer_link=${{ inputs.viewer_url }}/?map=$map_url&changes=$changes_url" >> "$GITHUB_OUTPUT"
         else
           sha="${{ github.sha }}"
-          appmap-ci publish --repo "${{ github.repository }}" --branch "${{ inputs.appmaps_branch }}" --files "$bundle=main/${sha:0:7}.appmap,$bundle=main/latest.appmap" --message "baseline @ $sha" >/dev/null
-          echo "viewer_link=${{ inputs.viewer_url }}/?map=https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse origin/${{ inputs.appmaps_branch }})/main/latest.appmap" >> "$GITHUB_OUTPUT"
+          screenmap-ci publish --repo "${{ github.repository }}" --branch "${{ inputs.screenmaps_branch }}" --files "$bundle=main/${sha:0:7}.scrmap,$bundle=main/latest.scrmap" --message "baseline @ $sha" >/dev/null
+          echo "viewer_link=${{ inputs.viewer_url }}/?map=https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse origin/${{ inputs.screenmaps_branch }})/main/latest.scrmap" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Comment on PR
@@ -245,7 +245,7 @@ runs:
         GH_TOKEN: ${{ inputs.github_token }}
       run: |
         artifact_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts"
-        appmap-ci comment --summary .appmap-ci/summary.json --post --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" \
+        screenmap-ci comment --summary .screenmap-ci/summary.json --post --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" \
           --viewer "${{ inputs.viewer_url }}" --artifact-url "$artifact_url" \
           $( [ -n "${{ steps.publish.outputs.map_url }}" ] && echo --map-url "${{ steps.publish.outputs.map_url }}" ) \
           $( [ -n "${{ steps.publish.outputs.changes_url }}" ] && echo --changes-url "${{ steps.publish.outputs.changes_url }}" ) \
@@ -257,9 +257,9 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github_token }}
       run: |
-        dir=$(python3 -c 'import json;print(json.load(open(".appmap-ci/summary.json")).get("recordedFlowsDir") or "")')
+        dir=$(python3 -c 'import json;print(json.load(open(".screenmap-ci/summary.json")).get("recordedFlowsDir") or "")')
         if [ -n "$dir" ]; then
-          appmap-ci flows-pr --repo "${{ github.repository }}" --flows "$dir" --base "${{ github.event.repository.default_branch }}" \
-            --title "appmap: record flows for new screens" \
-            --body "Flows recorded by the appmap agent during the baseline refresh for screens that had no committed flow. Review the taps, then merge — future runs replay them deterministically (no LLM)."
+          screenmap-ci flows-pr --repo "${{ github.repository }}" --flows "$dir" --base "${{ github.event.repository.default_branch }}" \
+            --title "screenmap: record flows for new screens" \
+            --body "Flows recorded by the screenmap agent during the baseline refresh for screens that had no committed flow. Review the taps, then merge — future runs replay them deterministically (no LLM)."
         else echo "no new flows recorded"; fi

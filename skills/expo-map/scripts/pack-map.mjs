@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Packs an .expo-map/ working directory into a distributable .appmap bundle (zip).
-// Usage: node pack-map.mjs [projectRoot] [--out <file.appmap>]
-// See docs/appmap-format.md for the format contract.
+// Packs an .expo-map/ working directory into a distributable .scrmap bundle (zip).
+// Usage: node pack-map.mjs [projectRoot] [--out <file.scrmap>]
+// See docs/scrmap-format.md for the format contract.
 
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -100,7 +100,7 @@ try {
   for (const f of flowFiles) fs.copyFileSync(path.join(flowsDir, f), path.join(stage, 'flows', f))
 
   const date = new Date().toISOString().slice(0, 10)
-  outPath = path.resolve(outPath ?? path.join(base, `${appName}-${date}.appmap`))
+  outPath = path.resolve(outPath ?? path.join(base, `${appName}-${date}.scrmap`))
   fs.rmSync(outPath, { force: true })
   execFileSync('zip', ['-r', '-q', outPath, 'manifest.json', 'map.json', 'screens', 'flows'], { cwd: stage })
   const kb = Math.round(fs.statSync(outPath).size / 1024)

@@ -1,6 +1,5 @@
-import { RotateCcw, ChevronLeft, ChevronRight, Copy } from 'lucide-react'
+import { RotateCcw, ChevronLeft, ChevronRight, Copy, X, Waypoints, Link2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Badge } from '@/components/ui/badge'
 import { RowMark } from './SidePanel'
 import { cn } from '@/lib/utils'
@@ -20,45 +19,73 @@ function DockShell({ children, className }) {
 }
 
 export function Playhead({
-  title, neighbours, neighbourCount, toggles, pos, total, onReplay, onPrev, onNext, onSeek, stepDescription, onCopy,
+  title, subjectPath, neighbours, neighbourCount, pos, total,
+  onReplay, onPrev, onNext, onSeek, stepDescription,
+  onCopy, deepLinkUrl, onCopyDeepLink, onShowNeighbours, onExitNeighbours,
 }) {
+  // Neighbours is not a peer of the playhead — it turns the playhead off and
+  // relights the whole map. So it gets its own state of this card, marked in
+  // the focus colour and carrying one unmistakable way back out.
+  if (neighbours) {
+    return (
+      <DockShell className="border-focus">
+        <div className="flex items-center gap-3">
+          <b className="min-w-0 flex-1 truncate text-[13px] font-semibold">One tap from {subjectPath}</b>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={onExitNeighbours}>
+            <X data-icon="inline-start" aria-hidden="true" />Exit
+          </Button>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {neighbourCount} screen{neighbourCount === 1 ? ' is' : 's are'} reachable in one action — lit on the map with their edges.
+        </p>
+      </DockShell>
+    )
+  }
+
   return (
     <DockShell>
       <div className="flex items-center justify-between gap-3">
         <b className="truncate text-[13px] font-semibold">{title}</b>
-        {toggles && (
-          <ToggleGroup type="single" size="sm" variant="outline" spacing={0} value={toggles.value} onValueChange={(v) => v && toggles.onChange(v)} className="shrink-0">
-            {toggles.options.map((o) => (
-              <ToggleGroupItem key={o.value} value={o.value} className="text-[11px] data-[state=on]:bg-primary/12 data-[state=on]:text-primary">
-                {o.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        )}
-        {!neighbours && <span className="tnum font-mono text-[11px] text-muted-foreground">{pos + 1} / {total}</span>}
+        <span className="tnum shrink-0 font-mono text-[11px] text-muted-foreground">{pos + 1} / {total}</span>
       </div>
-      {neighbours ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          {neighbourCount} screen{neighbourCount === 1 ? '' : 's'} reachable in one action — highlighted with their edges
-        </p>
-      ) : (
-        <>
-          <div className="mt-2.5 mb-1.5 flex items-center gap-2.5">
-            <Button variant="outline" size="icon" onClick={onReplay} disabled={pos === 0} aria-label="Replay from the first step"><RotateCcw aria-hidden="true" /></Button>
-            <Button variant="outline" size="icon" onClick={onPrev} disabled={pos === 0} aria-label="Previous step"><ChevronLeft aria-hidden="true" /></Button>
-            <div className="flex flex-1 flex-wrap justify-center gap-1.5">
-              {Array.from({ length: total }).map((_, k) => (
-                <button key={k} type="button" className={cn('ph-dot', k === pos ? 'now' : k < pos ? 'done' : '')} onClick={() => onSeek(k)} aria-label={`Step ${k + 1}`} />
-              ))}
-            </div>
-            <Button variant="outline" size="icon" onClick={onNext} disabled={pos === total - 1} aria-label="Next step"><ChevronRight aria-hidden="true" /></Button>
+
+      {/* transport reads left to right in one cluster, and the dots run on as a
+          rail from it rather than floating in the middle of the row */}
+      <div className="mt-2.5 flex items-center gap-3">
+        <div className="transport shrink-0">
+          <Button variant="outline" size="icon" onClick={onReplay} disabled={pos === 0} aria-label="Replay from the first step"><RotateCcw aria-hidden="true" /></Button>
+          <Button variant="outline" size="icon" onClick={onPrev} disabled={pos === 0} aria-label="Previous step"><ChevronLeft aria-hidden="true" /></Button>
+          <Button variant="outline" size="icon" onClick={onNext} disabled={pos === total - 1} aria-label="Next step"><ChevronRight aria-hidden="true" /></Button>
+        </div>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {Array.from({ length: total }).map((_, k) => (
+              <button key={k} type="button" className={cn('ph-dot', k === pos ? 'now' : k < pos ? 'done' : '')} onClick={() => onSeek(k)} aria-label={`Step ${k + 1}`} />
+            ))}
           </div>
-          <div className="flex items-center gap-2.5">
-            <p className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{stepDescription}</p>
-            <Button size="sm" onClick={onCopy}><Copy data-icon="inline-start" aria-hidden="true" />Copy replay</Button>
-          </div>
-        </>
-      )}
+          <span className="h-0.5 min-w-0 flex-1 bg-foreground/15" aria-hidden="true" />
+        </div>
+      </div>
+
+      <p className="mt-2 truncate font-mono text-xs text-muted-foreground">{stepDescription}</p>
+
+      <div className="-mx-[18px] mt-3 mb-0 h-px bg-foreground/15" />
+
+      <div className="mt-2.5 flex items-center gap-2">
+        {neighbourCount > 0 && (
+          <Button variant="ghost" size="sm" className="shrink-0" onClick={onShowNeighbours}>
+            <Waypoints data-icon="inline-start" aria-hidden="true" />
+            Show {neighbourCount} neighbour{neighbourCount === 1 ? '' : 's'}
+          </Button>
+        )}
+        <span className="min-w-0 flex-1" />
+        {deepLinkUrl && (
+          <Button variant="outline" size="sm" className="shrink-0" onClick={onCopyDeepLink} title={deepLinkUrl}>
+            <Link2 data-icon="inline-start" aria-hidden="true" />Deep link
+          </Button>
+        )}
+        <Button size="sm" className="shrink-0" onClick={onCopy}><Copy data-icon="inline-start" aria-hidden="true" />Copy replay</Button>
+      </div>
     </DockShell>
   )
 }
@@ -130,11 +157,11 @@ export function ChangeCard({ urlPath, diff, states }) {
   )
 }
 
-export function CommandSheet({ title, cmd, onCopy, onClose }) {
+export function CommandSheet({ title, heading, cmd, onCopy, onClose }) {
   return (
     <div className="absolute inset-0 z-30 grid place-items-center bg-background/60 backdrop-blur-sm animate-in fade-in-0 duration-200" onClick={onClose}>
       <div className="panel w-[min(560px,92vw)] p-5" onClick={(e) => e.stopPropagation()}>
-        <h2 className="mb-3 text-sm font-semibold">Replay · {title}</h2>
+        <h2 className="mb-3 text-sm font-semibold">{heading ?? `Replay · ${title}`}</h2>
         <pre className="m-0 overflow-x-auto rounded-lg border bg-muted/50 p-3.5 font-mono text-[11.5px] leading-relaxed select-all">{cmd}</pre>
         <div className="mt-3.5 flex gap-2.5">
           <Button className="flex-1" onClick={onCopy}><Copy data-icon="inline-start" aria-hidden="true" />Copy</Button>

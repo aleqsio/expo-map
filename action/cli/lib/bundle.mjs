@@ -1,4 +1,4 @@
-// .appmap / .appmapdiff helpers: read a baseline bundle, turn its map back
+// .scrmap / .diff.scrmap helpers: read a baseline bundle, turn its map back
 // into a parse-routes-shaped graph, pack a new baseline (reusing screenshots
 // for unchanged screens), and call the skill's diff-map.mjs to pack a diff.
 import { execFileSync } from 'node:child_process'
@@ -55,10 +55,10 @@ export function packDiff({ diffDir, device, out }) {
   if (device) args.push('--device', device)
   if (out) args.push('--out', out)
   execFileSync('node', args, { stdio: ['ignore', process.stderr, 'inherit'] })
-  return out ?? fs.readdirSync(diffDir).filter((f) => f.endsWith('.appmapdiff')).map((f) => path.join(diffDir, f))[0]
+  return out ?? fs.readdirSync(diffDir).filter((f) => f.endsWith('.diff.scrmap')).map((f) => path.join(diffDir, f))[0]
 }
 
-// Pack a baseline .appmap from loose parts. Mirrors pack-map.mjs but takes
+// Pack a baseline .scrmap from loose parts. Mirrors pack-map.mjs but takes
 // explicit dirs and adds graph.json + commit metadata (producer extensions;
 // viewers ignore unknown files/fields).
 export function packBaseline({ graph, screensDir, flowsDir, captureStatus = {}, appName, device, commit, ref, out }) {
@@ -76,7 +76,7 @@ export function packBaseline({ graph, screensDir, flowsDir, captureStatus = {}, 
   })
   const map = { nodes, edges: graph.edges ?? [], flows: [] }
   const manifest = {
-    formatVersion: 2, flowFormat: 'argent', generator: 'appmap-ci/0.1',
+    formatVersion: 2, flowFormat: 'argent', generator: 'screenmap-ci/0.1',
     app: { name: appName, scheme: graph.scheme ?? null, platform: 'ios-simulator', device: device ?? null, mode: graph.mode ?? null },
     source: { commit: commit ?? null, ref: ref ?? null },
     generatedAt: new Date().toISOString(),
