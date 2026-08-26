@@ -1,4 +1,4 @@
-# expo-map
+# screenmap
 
 A Claude Code skill that produces a **visual navigation map of an Expo / React Native app**: every screen as a card with a real screenshot, runtime state variants (bottom sheets, dialogs, drawers), the navigation edges between screens, and **replayable [argent](https://argent.swmansion.com) flows** recording how to reach each screen (headless replay: `argent flow run`) — packed into a portable `.scrmap` bundle and explored in an interactive visualiser.
 
@@ -21,20 +21,20 @@ A Claude Code skill that produces a **visual navigation map of an Expo / React N
 3. **Pack**: everything merges into a producer-agnostic `.scrmap` zip — see [docs/scrmap-format.md](docs/scrmap-format.md).
 4. **Visualise**: top-down graph (root screen top-center) with phone-framed screenshots, solid code-declared edges + dashed agent-observed edges, flow playback with a follow camera and tap/swipe markers on the exact screen state they happened on, per-screen state pickers, one-action **neighbours** mode, minimap click-to-jump, and copy-paste replay commands for every flow. Switch to **Changes** with a `.diff.scrmap` loaded: added/changed/removed screens and edges light up over the dimmed map, changed screens flip base⇄head in place, and hovering renders a region-aware visual diff (changed islands boxed, moved islands arrowed). See [docs/diff-scrmap-format.md](docs/diff-scrmap-format.md) and the `pr` mode in the skill.
 
-## Install the skill
+## Install the plugin
 
 ```bash
-git clone https://github.com/aleqsio/screenmap
-ln -s "$PWD/screenmap/skills/expo-map" ~/.claude/skills/expo-map
+claude plugin marketplace add aleqsio/screenmap
+claude plugin install screenmap@screenmap
 ```
 
 Then in any Expo/RN project, in Claude Code:
 
 ```
-/expo-map            # full run: parse + simulator exploration + pack
-/expo-map --static   # parse + render only, no simulator
-/expo-map replay <flow-name>   # replay a recorded flow on the simulator
-/expo-map pr <number>          # PR diff: which screens/states/edges changed → .diff.scrmap
+/screenmap            # full run: parse + simulator exploration + pack
+/screenmap --static   # parse + render only, no simulator
+/screenmap replay <flow-name>   # replay a recorded flow on the simulator
+/screenmap pr <number>          # PR diff: which screens/states/edges changed → .diff.scrmap
 ```
 
 Outputs land in `<project>/.expo-map/` (git-ignore it).
@@ -51,7 +51,7 @@ Drop a `.scrmap` bundle on the landing page. A demo bundle (a full Bluesky map: 
 
 ## Run it in CI (GitHub Action)
 
-`aleqsio/expo-map@main` reviews every PR's screens without re-mapping the app — and without
+`aleqsio/screenmap@v1` reviews every PR's screens without re-mapping the app — and without
 owning a build pipeline: the dev client comes from **EAS Build** (reused by fingerprint when only
 JS changed) or a prebuilt `app_path` you supply. Committed flows in `.screenmap/flows/` replay
 headlessly, the baseline map of `main` (cached on an
@@ -63,8 +63,8 @@ run the same pipeline locally: [docs/ci.md](docs/ci.md); workflow templates in [
 
 ## Repo layout
 
-- `skills/expo-map/SKILL.md` — the agent orchestration (phases, safety rails, flow-recording contract)
-- `skills/expo-map/scripts/` — `parse-routes.mjs`, `pack-map.mjs`, `diff-map.mjs` (PR diff: suspects + pack), `render-map.mjs` (static HTML fallback) — plain Node, no dependencies
+- `plugins/screenmap/skills/screenmap/SKILL.md` — the agent orchestration (phases, safety rails, flow-recording contract)
+- `plugins/screenmap/skills/screenmap/scripts/` — `parse-routes.mjs`, `pack-map.mjs`, `diff-map.mjs` (PR diff: suspects + pack), `render-map.mjs` (static HTML fallback) — plain Node, no dependencies
 - `apps/visualiser/` — the Map / Changes viewer (Vite + React + Tailwind v4 + shadcn/ui + React Flow + elkjs; pixelmatch + OpenCV.js for the visual diff)
 - `docs/scrmap-format.md` — bundle format contract, versioned
 - `docs/diff-scrmap-format.md` — the PR diff bundle (Changes) format

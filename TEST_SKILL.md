@@ -3,7 +3,7 @@
 There is a standing dogfood repo: **https://github.com/aleqsio/expo-map-sample**
 (local checkout: `~/Projects/expo-map-sample`). Use it to test Action changes on
 real GitHub infrastructure instead of guessing. Every workflow there consumes
-`aleqsio/expo-map@main`, so **pushing to this repo's `main` is deploying** — the
+`aleqsio/screenmap@v1`, so **pushing to this repo's `main` is deploying** — the
 next sample run picks it up.
 
 ## What the sample repo has

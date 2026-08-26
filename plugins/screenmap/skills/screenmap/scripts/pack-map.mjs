@@ -79,7 +79,7 @@ const map = { nodes, edges: graph.edges ?? [], flows: [] }
 const manifest = {
   formatVersion: 2,
   flowFormat: 'argent', // flows/*.yaml runnable via `argent flow run`
-  generator: 'expo-map/2.0',
+  generator: 'screenmap/2.0',
   app: {
     name: appName,
     scheme: graph.scheme ?? null,

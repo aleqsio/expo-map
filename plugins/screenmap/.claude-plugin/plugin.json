@@ -1,0 +1,11 @@
+{
+  "name": "screenmap",
+  "version": "1.0.0",
+  "description": "Map every screen of an Expo app from your own terminal, and pack it into a .scrmap bundle you can open in the viewer.",
+  "author": {
+    "name": "aleqsio"
+  },
+  "homepage": "https://screenmap.dev",
+  "repository": "https://github.com/aleqsio/screenmap",
+  "license": "MIT"
+}

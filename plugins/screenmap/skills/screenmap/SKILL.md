@@ -1,9 +1,9 @@
 ---
-name: expo-map
+name: screenmap
 description: Generate a visual navigation map of an Expo app. Statically parses expo-router routes and links for full coverage, then deep-links through every screen in the iOS simulator capturing screenshots — including runtime states like bottom sheet snap points and modals — and renders a self-contained HTML map. Also diffs two revisions into a PR preview (.diff.scrmap) showing which screens/edges were added, removed, or changed. Use when the user asks to map an Expo/React Native app's navigation, screens, or routes, wants a visual sitemap of their app, or wants to preview/review what a PR changes on-screen.
 ---
 
-# expo-map
+# screenmap
 
 Produce a visual map of an Expo app's navigation: every expo-router route as a card with a screenshot, runtime state variants (bottom sheets at each snap point, modals), and navigation edges between screens.
 
@@ -139,7 +139,7 @@ node <this skill's dir>/scripts/render-map.mjs <project>/.expo-map/graph.json   
 
 The `.scrmap` bundle (zip: manifest.json + map.json + screens/) is the primary deliverable — see `docs/scrmap-format.md` in the skill repo. Open it in the **visualiser** (`apps/visualiser` in the skill repo, `npm run dev`, drag the bundle in): interactive graph, flow playback, click-to-copy replay commands. Send the bundle with SendUserFile; send `map.html` too as the no-tooling fallback (display: render). Report: routes captured / total, state variants captured, anything skipped (error screens, auth redirects, un-triggerable sheets), unresolved edges. Offer to publish as an Artifact (if so, load the artifact-design skill first and rebuild the page body-only per Artifact rules — don't publish the full-document HTML as-is). Suggest adding `.expo-map/` to `.gitignore`.
 
-## Replay mode — `/expo-map replay <flow-name>`
+## Replay mode — `/screenmap replay <flow-name>`
 
 Flows are argent YAML, so the primary replay is **headless**:
 
@@ -149,7 +149,7 @@ npx @swmansion/argent flow run <project>/.expo-map/flows/<flow-name>.yaml
 
 Run that first (it needs no LLM and reports pass/fail per step). Fall back to manual replay only when argent isn't installed and can't be (`npx` unavailable) or when the flow fails and the user wants a diagnosis: execute the YAML steps yourself — `open-url`/`wait` via `xcrun simctl`, taps/swipes via the simulator MCP using the sidecar's `target` labels as the source of truth (recorded coordinates are hints that may have drifted). Verify each step with an MCP screenshot; if a target can't be found in 3 attempts, stop and report which step failed and what the screen showed instead. Same safety rules as Phase 5: never trigger destructive or submitting controls.
 
-## PR diff mode — `/expo-map pr <number>` or `/expo-map diff <base>..<head>`
+## PR diff mode — `/screenmap pr <number>` or `/screenmap diff <base>..<head>`
 
 Preview what a change does to the app's navigation surface: which screens were **added,
 removed, or changed**, which edges appeared or vanished, with before/after screenshots.

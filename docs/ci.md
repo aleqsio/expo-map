@@ -59,7 +59,7 @@ on one EAS build (queue + build time).
 | Step | Lane | Notes |
 | --- | --- | --- |
 | Restore baseline for the PR base SHA (or `latest`) | — | from the `screenmaps` branch |
-| `parse-routes` on head, `diff-map suspects` vs baseline graph | deterministic | same suspect logic as `/expo-map pr` |
+| `parse-routes` on head, `diff-map suspects` vs baseline graph | deterministic | same suspect logic as `/screenmap pr` |
 | Copy base-side screenshots of suspects from the baseline | deterministic | nothing is captured twice |
 | Replay committed flows for suspects (`argent flow run`, fragments around capture points) | deterministic | **self-checked**: the replay's end screen must resemble the route's deep-link capture (pixelmatch ≥ 0.45); otherwise the flow is marked *drifted*, the deep-link capture is used, the app is relaunched, and the flow is queued for re-recording |
 | Deep-link the rest | deterministic | `xcrun simctl openurl` + screenshot |

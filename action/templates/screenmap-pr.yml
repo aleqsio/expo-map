@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: aleqsio/expo-map@main
+      - uses: aleqsio/screenmap@v1
         with:
           mode: pr
           agent_api_key: ${{ secrets.ANTHROPIC_API_KEY }}   # optional — omit for deterministic-only

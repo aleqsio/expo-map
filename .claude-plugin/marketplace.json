@@ -1,0 +1,16 @@
+{
+  "name": "screenmap",
+  "owner": {
+    "name": "aleqsio"
+  },
+  "metadata": {
+    "description": "Map every screen of an Expo / React Native app, and see what a pull request changes on-screen."
+  },
+  "plugins": [
+    {
+      "name": "screenmap",
+      "source": "./plugins/screenmap",
+      "description": "Map every screen of an Expo app from your own terminal, and pack it into a .scrmap bundle you can open in the viewer."
+    }
+  ]
+}

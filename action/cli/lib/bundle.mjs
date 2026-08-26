@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { readJson, writeJson, ensureDir, log } from './util.mjs'
 
-export const SKILL_SCRIPTS = path.resolve(new URL('../../../skills/expo-map/scripts', import.meta.url).pathname)
+export const SKILL_SCRIPTS = path.resolve(new URL('../../../plugins/screenmap/skills/screenmap/scripts', import.meta.url).pathname)
 
 export function unzipTo(bundlePath, dir) {
   ensureDir(dir)

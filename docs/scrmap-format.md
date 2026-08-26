@@ -2,7 +2,7 @@
 
 A `.scrmap` file is a plain **zip** containing everything needed to render an application's
 navigation map: the graph, screenshots, capture verdicts, and replayable flows.
-It is the *interchange* format — the expo-map skill's working directory
+It is the *interchange* format — the screenmap skill's working directory
 (`.expo-map/` with `graph.json`, `capture-status.json`, `flows/`, `screens/`) is the
 append-friendly *working* format, and `pack-map.mjs` merges it into a bundle.
 
@@ -32,7 +32,7 @@ myapp-2026-08-08.scrmap        (zip)
 ```jsonc
 {
   "formatVersion": 1,
-  "generator": "expo-map/1.0",
+  "generator": "screenmap/1.0",
   "app": {
     "name": "bluesky",            // display name
     "scheme": "bluesky",          // deep-link scheme, null if unknown

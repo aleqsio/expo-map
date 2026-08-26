@@ -28,7 +28,7 @@ human reviewing the diff, not input to the classification.
 {
   "formatVersion": 1,
   "kind": "diff",                  // discriminates from plain .scrmap bundles
-  "generator": "expo-map/1.0",
+  "generator": "screenmap/1.0",
   "app": { "name": "bluesky", "scheme": "bluesky", "platform": "ios-simulator",
            "device": "iPhone 17 Pro", "mode": "react-navigation" },
   "base": { "ref": "main", "commit": "abc1234", "generatedAt": "…" },

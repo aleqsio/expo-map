@@ -2,7 +2,7 @@
 // reach. Provider-agnostic — the contract is file-based (the agent writes
 // captures, flows, notes.json and summary.json to the paths we hand it), so
 // any agentic CLI that can run shell commands fills the slot. Layered
-// guidance: the generic expo-map skill + the repo's own .screenmap/SKILL.md.
+// guidance: the generic screenmap skill + the repo's own .screenmap/SKILL.md.
 // Budgeted, side-effect-free (writes only into the given out dirs), and it
 // reports what it recorded so the baseline job can open a flows PR.
 import { spawnSync } from 'node:child_process'
@@ -10,7 +10,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { ensureDir, log, readJson } from './util.mjs'
 
-export const SKILL_DIR = path.resolve(new URL('../../../skills/expo-map', import.meta.url).pathname)
+export const SKILL_DIR = path.resolve(new URL('../../../plugins/screenmap/skills/screenmap', import.meta.url).pathname)
 
 // Each preset knows how to invoke its CLI headlessly with full permissions
 // (the runner is disposable) and which env var carries its key. `pkg` is the
@@ -101,7 +101,7 @@ export function runAgent({ projectDir, config, screens, scheme, udid, bundleId, 
   const repoSkill = path.join(projectDir, config.skillFile)
   const repoSkillText = fs.existsSync(repoSkill) ? fs.readFileSync(repoSkill, 'utf8') : null
 
-  const prompt = `You are running the expo-map skill's capture phases headlessly in CI (no simulator MCP — use \`xcrun simctl\` for deep links/screenshots and the \`argent\` CLI for taps/swipes: \`argent run <tool> …\` (\`argent tools\` lists them; if \`argent\` is not on PATH, run \`npx -y @swmansion/argent@0.21.0\` from a directory OUTSIDE the project, e.g. /tmp, because this repo's devEngines pin breaks npx inside it)). The app is already running on simulator ${udid} (bundle ${bundleId}, scheme ${scheme}://), Metro is up. Do not rebuild, reinstall, or checkout anything.
+  const prompt = `You are running the screenmap skill's capture phases headlessly in CI (no simulator MCP — use \`xcrun simctl\` for deep links/screenshots and the \`argent\` CLI for taps/swipes: \`argent run <tool> …\` (\`argent tools\` lists them; if \`argent\` is not on PATH, run \`npx -y @swmansion/argent@0.21.0\` from a directory OUTSIDE the project, e.g. /tmp, because this repo's devEngines pin breaks npx inside it)). The app is already running on simulator ${udid} (bundle ${bundleId}, scheme ${scheme}://), Metro is up. Do not rebuild, reinstall, or checkout anything.
 
 Read the skill at ${SKILL_DIR}/SKILL.md for conventions (capture naming, flow recording format, safety rules: never tap destructive/purchase/sign-out controls, never record credentials). The project lives at ${projectDir}. All output paths below are absolute — write to them exactly.
 ${repoSkillText ? `\nProject-specific guidance (.screenmap/SKILL.md) — follow it:\n---\n${repoSkillText}\n---\n` : ''}
