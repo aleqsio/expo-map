@@ -6,6 +6,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="screenmap — every screen of your app as a map, and every pull request as a set of changes on it." />
     <title>screenmap</title>
+
+    <!-- Absolute, because scrapers do not resolve relative URLs. og.png is
+         rendered from scripts/og.html by scripts/make-og.sh. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Screenmap" />
+    <meta property="og:title" content="screenmap — the map viewer" />
+    <meta property="og:description" content="Every screen of your app as a map, and every pull request as a set of changes on it. Drop a .scrmap to explore, a .diff.scrmap to review — everything parses in your browser." />
+    <meta property="og:url" content="https://app.screenmap.dev/" />
+    <meta property="og:image" content="https://app.screenmap.dev/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The screenmap viewer: three captured app screens on a map with the routes between them, two of them marked added and changed." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="screenmap — the map viewer" />
+    <meta name="twitter:description" content="Every screen of your app as a map, and every pull request as a set of changes on it." />
+    <meta name="twitter:image" content="https://app.screenmap.dev/og.png" />
   </head>
   <body>
     <div id="root"></div>

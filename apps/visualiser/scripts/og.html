@@ -1,0 +1,168 @@
+<!doctype html>
+<!--
+  Source for public/og.png — the card that shows when app.screenmap.dev is
+  pasted anywhere. Rendered at exactly 1200x630 by scripts/make-og.sh.
+
+  It is a portrait of the viewer itself: its own top bar, its own dotted
+  canvas, screens on the map with routes between them and the diff plate on
+  the two that a pull request touched. Captures in og-shots/ are the demo
+  bundle's, downscaled — the page has to render from disk with no server.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Doto:wght@100..900&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    />
+    <style>
+      :root {
+        --ink: #000;
+        --paper: #f2f1e9;
+        --paper-2: #faf9f4;
+        --paper-3: #e7e5da;
+        --soft: #5b5b52;
+        --primary: #20456e;
+        --added: #1f6f3d;
+        --changed: #8a6100;
+        --w: 2px;
+        --serif: 'Newsreader', Georgia, serif;
+        --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+        --dot: 'Doto', 'IBM Plex Mono', monospace;
+      }
+      * { box-sizing: border-box; margin: 0; }
+      body {
+        width: 1200px; height: 630px; overflow: hidden; position: relative;
+        background: var(--paper);
+        background-image: radial-gradient(rgba(0, 0, 0, 0.16) 1.4px, transparent 1.4px);
+        background-size: 22px 22px;
+        font-family: var(--serif); color: var(--ink);
+      }
+
+      /* the viewer's own top bar, floating on the canvas as it does in the app */
+      .bar {
+        position: absolute; left: 46px; top: 40px; z-index: 3;
+        display: flex; align-items: center; gap: 18px;
+        background: var(--paper-2); border: var(--w) solid var(--ink);
+        border-radius: 8px; box-shadow: 4px 4px 0 var(--ink);
+        padding: 11px 18px;
+      }
+      .brand { display: flex; align-items: center; gap: 9px; }
+      .brand svg { width: 25px; height: 25px; color: var(--primary); }
+      .brand b { font-weight: 600; font-size: 21px; letter-spacing: -0.03em; }
+      .app { border-left: var(--w) solid var(--ink); padding-left: 18px; line-height: 1.25; }
+      .app b { display: block; font-family: var(--mono); font-size: 13px; font-weight: 500; }
+      .app span { font-family: var(--mono); font-size: 10.5px; color: var(--soft); }
+      .toggle { display: flex; border: var(--w) solid var(--ink); border-radius: 5px; overflow: hidden; }
+      .toggle span {
+        font-family: var(--mono); font-size: 12px; padding: 5px 12px;
+      }
+      .toggle .on { background: var(--ink); color: var(--paper-2); }
+      .stats { display: flex; gap: 14px; font-family: var(--mono); font-size: 11px; color: var(--soft); }
+      .stats b { color: var(--ink); font-weight: 500; font-family: var(--mono); }
+
+      /* the strapline, set as the page's own type rather than the app's */
+      .say {
+        position: absolute; left: 46px; bottom: 42px; z-index: 3; max-width: 430px;
+        font-size: 31px; line-height: 1.24; letter-spacing: -0.015em;
+      }
+      .say em { font-style: italic; }
+      .say .url {
+        display: block; margin-top: 20px; font-family: var(--dot); font-weight: 700;
+        font-size: 14px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--soft);
+      }
+
+      /* the map itself */
+      .canvas { position: absolute; inset: 0; }
+      .node { position: absolute; width: 150px; }
+      .phone {
+        position: relative; display: block; background: var(--ink);
+        border-radius: 20px; padding: 4px;
+        box-shadow: 0 2px 3px rgba(0, 0, 0, 0.18), 0 9px 18px -6px rgba(0, 0, 0, 0.2);
+      }
+      .phone img { display: block; width: 100%; height: auto; border-radius: 16px; }
+      .node.a .phone { box-shadow: 0 0 0 3px var(--added), 0 9px 18px -6px rgba(0, 0, 0, 0.22); }
+      .node.m .phone { box-shadow: 0 0 0 3px var(--changed), 0 9px 18px -6px rgba(0, 0, 0, 0.22); }
+      .plate {
+        position: absolute; left: 50%; translate: -50% 0; bottom: 9px;
+        font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+        color: var(--paper-2); border-radius: 3px; padding: 2px 7px; white-space: nowrap;
+      }
+      .node.a .plate { background: var(--added); }
+      .node.m .plate { background: var(--changed); }
+      .rt {
+        display: block; margin: 8px auto 0; width: fit-content; max-width: 100%;
+        font-family: var(--mono); font-size: 11px;
+        background: var(--paper-2); border: var(--w) solid var(--ink);
+        border-radius: 3px; padding: 2px 7px;
+      }
+      /* three, staggered, every one of them whole: a phone is 1:2.17, so at
+         150px each row is 350px with its route chip and only one row clears
+         630 under the bar. */
+      .n1 { left: 530px; top: 140px; }
+      .n2 { left: 740px; top: 200px; }
+      .n3 { left: 950px; top: 140px; }
+      svg.wires { position: absolute; inset: 0; width: 1200px; height: 630px; }
+    </style>
+  </head>
+  <body>
+    <div class="canvas">
+      <svg class="wires" viewBox="0 0 1200 630" fill="none" aria-hidden="true">
+        <g stroke="#000" stroke-width="2" opacity="0.7">
+          <path d="M680 303 H710 V363 H732" />
+          <path d="M890 363 H920 V303 H942" />
+        </g>
+        <g fill="#000" opacity="0.7">
+          <path d="M732 357 L744 363 L732 369 Z" />
+          <path d="M942 297 L954 303 L942 309 Z" />
+        </g>
+      </svg>
+
+      <span class="node n1">
+        <span class="phone"><img src="og-shots/Feeds.webp" alt="" /></span>
+        <code class="rt">/feeds</code>
+      </span>
+      <span class="node n2 m">
+        <span class="phone">
+          <img src="og-shots/Profile.webp" alt="" />
+          <span class="plate">± changed</span>
+        </span>
+        <code class="rt">/profile/:name</code>
+      </span>
+      <span class="node n3 a">
+        <span class="phone">
+          <img src="og-shots/Settings.webp" alt="" />
+          <span class="plate">+ added</span>
+        </span>
+        <code class="rt">/settings</code>
+      </span>
+    </div>
+
+    <div class="bar">
+      <span class="brand">
+        <!-- the mark: two screens with a route between them (public/favicon.svg) -->
+        <svg viewBox="4 4 24 24" aria-hidden="true">
+          <g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+            <rect x="6" y="5" width="9" height="11" rx="1.5" />
+            <rect x="18" y="16" width="9" height="11" rx="1.5" />
+            <path d="M15 10.5h4a2 2 0 0 1 2 2V16" />
+          </g>
+        </svg>
+        <b>screenmap</b>
+      </span>
+      <span class="app">
+        <b>bluesky</b>
+        <span>react-navigation · iPhone 17 Pro</span>
+      </span>
+      <span class="toggle"><span>Map</span><span class="on">Changes</span></span>
+      <span class="stats"><span><b>70</b> screens</span><span><b>50</b> captured</span><span><b>126</b> flows</span></span>
+    </div>
+
+    <div class="say">
+      Every screen of your app as a map, and every pull request as a <em>set of changes on it</em>.
+      <span class="url">app.screenmap.dev</span>
+    </div>
+  </body>
+</html>

@@ -272,7 +272,7 @@ The expensive part is step 2, and you only pay it once. Recorded flows get commi
 - `action.yml` is the composite GitHub Action. The metadata sits at the repo root so the repo is publishable to the Marketplace. Its `screenmap-ci` CLI lives in `action/cli`, and the workflow and `.scrmap` templates live in `action/templates`.
 - [`docs/scrmap-format.md`](docs/scrmap-format.md) is the versioned bundle format contract, for writing your own producer.
 - [`docs/diff-scrmap-format.md`](docs/diff-scrmap-format.md) is the format of the PR diff bundle behind the Changes view.
-- [`docs/ci.md`](docs/ci.md) is the standalone version of the CI guide above, for linking to on its own.
+- [`docs/ci.md`](docs/ci.md) is a stub pointing at the CI section above, which is where that guide lives now.
 - `fixtures/demo-app/` is a minimal expo-router app that exercises the parser.
 
 ## Known limits
