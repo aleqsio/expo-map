@@ -6,32 +6,42 @@ the full write-up of what that turned up is in `site/docs/setup-instruction-fixe
 
 ---
 
-## Verify that a deep link actually arrived
+## Drifted flows have no repair path without an agent
 
-The highest-value item on this list, and it costs nothing to run.
+`effort=deterministic` (now the automatic choice when no agent key is set) makes
+this urgent: it is the one mode where nothing can fix a broken flow, and it is
+the mode a keyless repo lands in by default.
 
-`session.visit()` resolving counts as a successful capture. Nothing checks that
-the app landed on the screen we asked for, so a route that starts requiring a
-param captures its own not-found state and reports it as that screen. The run
-goes green.
+When `verifyLanding()` fails a replay, `screenmap-ci.mjs` deletes the captures,
+falls back to a deep link, records the route in `result.drifted` and pushes it
+onto `result.unflowed` with reason `flow drifted`. The PR comment says the flow
+was "queued to be re-recorded". Nothing is queued anywhere. `unflowed` has
+exactly one consumer, the agent lane, so with no agent the committed flow in
+`.screenmap/flows` stays broken, the same warning appears on every subsequent
+PR, and the screen quietly degrades to an unverified deep link forever. Newly
+added routes have the same shape: flowless by definition, and nothing without a
+key ever gives them a flow.
 
-The check already exists: `verifyLanding()` OCRs the capture for the landmarks
-in a flow's `.meta.json` sidecar. It runs only on flow replays, never on
-deep-link captures. Vision OCR is local, so extending it costs no tokens.
+There is a second gap underneath it. The local skill writes flows to
+`.screenmap/out/flows/` and tells you to gitignore that directory, while CI
+replays from `config.flowsDir`, `.screenmap/flows`. Nothing moves them across.
+In CI the baseline job bridges it by calling `flows-pr`; a local run has no
+equivalent, so "record locally, replay deterministically in CI" does not
+actually work today without a manual copy. That makes it the first thing to fix,
+because the site now points people at exactly that workflow.
 
-Two parts:
+`screenmap-ci flows-adopt` now bridges `out/flows` to `.screenmap/flows`, and
+the drift and over-budget warnings say what to do about it, so the two cheapest
+items are done. What is left:
 
-1. Verify deep-link captures the same way replays are verified. A route's own
-   landmarks come from its committed flow sidecar when there is one; for routes
-   with no flow, the baseline capture's OCR text is a usable reference.
-2. Route the failures to the agent. Today only `result.unflowed` reaches the
-   agent lane, and that is gated on having no committed flow at all
-   (`screenmap-ci.mjs`, the `if (!f)` in the deep-link branch). A route whose
-   flow exists but could not replay falls through to a deep link and is never
-   re-checked, however wrong the result looks.
-
-With both, `effort` becomes a real cost dial rather than a guess: `fast` still
-detects bad captures, and only the screens that failed cost agent tokens.
+1. Try repairing drift without an LLM before giving up. Every coordinate tap in
+   an argent flow carries a `target` label, and Vision OCR is already local and
+   free. Re-resolving a step by its label when its coordinates miss would fix
+   the common case, a layout shift, with no tokens and no agent. Speculative:
+   worth a spike against a real drifted flow before committing to it.
+2. Persist the drift list between runs so a scheduled baseline with a key can
+   re-record everything that accumulated, with deterministic PR runs in between.
+   Today `drifted` lives only in one run's `summary.json`.
 
 ## Decide `suspects.broadCap`
 
@@ -97,8 +107,20 @@ Kept for context on what changed, since several of these alter behaviour.
 - `effort` (`fast` / `balanced` / `thorough`) replaces reasoning about `scan`,
   `maxScreens` and `suspects.depth` separately. Default is `balanced`, which
   spends a little more than previous behaviour.
+- `deterministic` joins the presets: no agent, no tokens, committed flows replay
+  and everything else is deep-linked. An unstated `effort` resolves to it when no
+  agent key is available, so a keyless run is a named mode rather than a degraded
+  one. An effort you state explicitly is still honoured even when it cannot run.
 - The PR comment is posted when the run starts and rewritten as it progresses,
   including a no-baseline state that names the workflow_dispatch trigger.
 - The viewer's Changes view stopped showing unchanged screens as NO CAPTURE.
 - The expo-dev-menu floating gear is muted; it had been in every capture since
   dev-menu 57.
+- Deep-link captures are verified, not assumed. `verifyDeepLink()` checks a
+  committed flow's landmarks, or — for a parameterised route — opens the same
+  route with an impossible value and compares: if the real id and a nonsense one
+  render the same screen, the real one resolved no better. Local OCR, no tokens.
+  Failures now reach the agent whether or not a flow exists, and the comment
+  names them instead of presenting a not-found screen as the screen.
+- `flows-adopt` moves locally recorded flows into the directory CI replays from,
+  refusing to overwrite a committed flow that differs.

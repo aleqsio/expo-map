@@ -11,6 +11,8 @@
 //                      [--post --repo owner/name --pr <n>]
 //   screenmap-ci publish  --repo owner/name [--branch screenmaps] --files src=dest[,src=dest…] --message "…"
 //   screenmap-ci flows-pr --repo owner/name --flows <dir> [--base main] --title "…" [--body "…"]
+//   screenmap-ci flows-adopt --project <dir> [--from .screenmap/out/flows] [--to .screenmap/flows] [--force]
+//                      move locally recorded flows into the directory CI replays from
 //   screenmap-ci resolve-app --project <dir> [--profile development-simulator]   (EAS: reuse-by-fingerprint or build)
 //
 // Runs locally too: the same commands the Action runs, against your own
@@ -20,7 +22,7 @@ import path from 'node:path'
 import { parseArgs, loadConfig, readJson, writeJson, ensureDir, exists, log, sh, deepLinkFor } from './lib/util.mjs'
 import { openSession } from './lib/sim.mjs'
 import { readBaseline, parseRoutes, computeSuspects, packBaseline, packDiff, downscaleAll } from './lib/bundle.mjs'
-import { loadFlows, replayFlow, verifyLanding } from './lib/replay.mjs'
+import { loadFlows, replayFlow, verifyLanding, verifyDeepLink } from './lib/replay.mjs'
 import { argentAvailable, argentVersion } from './lib/argent.mjs'
 import { runAgent, agentInfo } from './lib/agent.mjs'
 import { upsertStickyComment, publishToBranch, openFlowsPR, repoSlug } from './lib/github.mjs'
@@ -43,7 +45,7 @@ const copyShots = (fromDir, toDir, slug) => {
 // Capture a list of routes on the live session: committed flow replay first,
 // deep link otherwise, agent for what's left (budgeted). Shared by both jobs.
 async function captureRoutes({ project, config, scheme, session, routes, flows, outDir, work, agentMode, prContext, agentEnabled }) {
-  const result = { replay: [], deeplink: [], agent: [], failed: [], unflowed: [], drifted: [] }
+  const result = { replay: [], deeplink: [], agent: [], failed: [], unflowed: [], drifted: [], unverified: [] }
   const canReplay = flows.size > 0 && argentAvailable()
   if (flows.size > 0 && !canReplay) log('argent not available — committed flows will not be replayed this run')
   for (const r of routes) {
@@ -82,9 +84,34 @@ async function captureRoutes({ project, config, scheme, session, routes, flows, 
     if (!done) {
       try {
         const wait = (r.params?.length ? config.waits.network : config.waits.transition)
-        await session.visit(deepLinkFor(scheme, r, config.params), path.join(outDir, `${r.slug}.png`), wait)
+        const shot = path.join(outDir, `${r.slug}.png`)
+        await session.visit(deepLinkFor(scheme, r, config.params), shot, wait)
         result.deeplink.push(r.id)
-        if (!f) result.unflowed.push(r)
+        // A resolved deep link is not an arrived one. Check it the same way a
+        // replay is checked, so a route that quietly renders its not-found
+        // state stops being reported as the screen.
+        const v = await verifyDeepLink({
+          shot, rec: f?.visit ?? f?.nav ?? null,
+          probeBogus: r.params?.length
+            ? async () => {
+                try {
+                  await session.relaunch()
+                  const p = path.join(work, 'tmp', `${r.slug}.bogus.png`)
+                  const bogus = Object.fromEntries(r.params.map((n) => [n, 'zzscreenmapzz']))
+                  await session.visit(deepLinkFor(scheme, r, bogus), p, config.waits.network)
+                  await session.relaunch()
+                  return p
+                } catch { return null }
+              }
+            : null,
+        })
+        if (v.ok === false) {
+          log(`deep link for ${r.id} looks wrong (${v.method} ${v.score}) — queued for the agent`)
+          result.unverified.push({ route: r.id, method: v.method, score: v.score })
+          // regardless of whether a flow exists: a committed flow that could not
+          // replay left us here, and its capture is no more trustworthy
+          result.unflowed.push({ ...r, reason: (r.reason ? r.reason + '; ' : '') + `deep link did not arrive (${v.method})` })
+        } else if (!f) result.unflowed.push(r)
       } catch (e) {
         log(`deep link failed for ${r.id}: ${e.message}`)
         result.failed.push(r.id)
@@ -96,11 +123,12 @@ async function captureRoutes({ project, config, scheme, session, routes, flows, 
   // preset (fast | balanced | thorough — see EFFORTS in lib/util.mjs), or from
   // agent.scan set explicitly.
   //
-  // Nothing verifies that a deep link landed anywhere sensible, so a route that
-  // starts needing a param captures its own not-found state and reports it as
-  // the screen. The agent is told to check the link actually arrived and to
-  // find real params when it did not, so handing it a screen is what makes that
-  // recoverable — which is the whole difference between the presets.
+  // Captures that failed verification are already in result.unflowed with a
+  // reason, whatever the effort, so every mode now detects a deep link that did
+  // not arrive. The presets decide how much is re-checked speculatively on top:
+  // scan=params hands over every parameterised route rather than only the ones
+  // OCR could condemn, which still catches an app that renders the same shell
+  // for any id.
   const scan = config.agent.scan
   const unflowedIds = new Set(result.unflowed.map((r) => r.id))
   const extra =
@@ -125,7 +153,7 @@ async function captureRoutes({ project, config, scheme, session, routes, flows, 
     // the comment footer says why the agent sat out; the log should too, or a
     // run that quietly explored nothing looks identical to one that had nothing
     // to explore
-    if (!a.ran) log(`agent: not run — ${a.reason} (${screens.length} screen(s) had no flow)`)
+    if (!a.ran) log(`agent: not run — ${a.reason} (${result.unflowed.length} screen(s) had no flow)`)
     if (a.ran) {
       // agent captures supersede deep-link ones for the screens it handled
       for (const id of a.summary.captured ?? []) {
@@ -268,8 +296,12 @@ async function pr() {
     suspects: { added: suspects.capture.filter((c) => c.status === 'A').length, modified: suspects.capture.filter((c) => c.status === 'M').length, removed: suspects.capture.filter((c) => c.status === 'D').length, broadFiles: suspects.broadFiles },
     captured: { replay: cap.replay.length, deeplink: cap.deeplink.length, agent: cap.agent.length, failed: cap.failed },
     agent: cap.agentRun ?? { ran: false }, recordedFlowsDir: cap.recordedFlowsDir ?? null, drifted: cap.drifted ?? [],
+    unverified: cap.unverified ?? [],
     diff: { nodes: diff.nodes, dismissed: diff.dismissed ?? [], edges: diff.edges, states: (diff.states ?? []).filter((s) => s.reason !== 'hint') },
-    routes: Object.fromEntries(headGraph.routes.map((r) => [r.id, r.urlPath])),
+    // base first so head wins on collision: a removed route only exists on the
+    // base side, and without it the comment prints its bare id ("grind")
+    // where every other row shows a path ("/grind")
+    routes: Object.fromEntries([...base.graph.routes, ...headGraph.routes].map((r) => [r.id, r.urlPath])),
     shots: collectShots(diffDir, [...headGraph.routes, ...base.graph.routes], [...diff.nodes.map((d) => d.id), ...(diff.dismissed ?? []).map((d) => d.id)]),
   }
   writeJson(path.join(work, 'summary.json'), summary)
@@ -429,8 +461,19 @@ function renderComment(s, { mapUrl, changesUrl, artifactUrl, shotUrl, shotsBase,
   // things that went wrong get to be seen, not buried in the footnote
   const warn = []
   if (s.captured.failed?.length) warn.push(`${s.captured.failed.length} screen${s.captured.failed.length === 1 ? '' : 's'} could not be captured — deep link failed in CI.`)
-  if (s.agent?.ran && s.agent.overBudget?.length) warn.push(`${s.agent.overBudget.length} screen${s.agent.overBudget.length === 1 ? '' : 's'} hit the agent budget before reaching a stable state.`)
-  if (s.drifted?.length) warn.push(`${s.drifted.length} committed flow${s.drifted.length === 1 ? '' : 's'} drifted (${s.drifted.map((d) => d.flows[0]).join(', ')}) — captured by deep link instead, and queued to be re-recorded.`)
+  // they were never explored at all, so do not imply they were tried and failed
+  if (s.agent?.ran && s.agent.overBudget?.length) warn.push(`${s.agent.overBudget.length} screen${s.agent.overBudget.length === 1 ? '' : 's'} were over the agent budget and went unexplored — raise \`agent_max_screens\` or \`effort\` to include them.`)
+  // "queued to be re-recorded" was only ever true when an agent could do the
+  // re-recording. With no key nothing is queued anywhere and the same warning
+  // returns on every PR, so say what actually has to happen instead.
+  if (s.drifted?.length) {
+    const names = s.drifted.map((d) => `\`${d.flows[0]}\``).join(', ')
+    warn.push(
+      s.agent?.hasKey
+        ? `${s.drifted.length} committed flow${s.drifted.length === 1 ? '' : 's'} drifted (${names}) — captured by deep link instead. The next baseline run re-records ${s.drifted.length === 1 ? 'it' : 'them'} and opens a flows PR.`
+        : `${s.drifted.length} committed flow${s.drifted.length === 1 ? '' : 's'} drifted (${names}) — captured by deep link instead. Nothing re-records ${s.drifted.length === 1 ? 'it' : 'them'} without an agent key, so ${s.drifted.length === 1 ? 'this flow' : 'these flows'} stays broken: re-record locally with \`/screenmap\`, adopt with \`screenmap-ci flows-adopt\`, and commit.`
+    )
+  }
   if (warn.length) lines.push('', '> [!WARNING]', ...warn.map((w) => `> ${w}`))
 
   if (s.recordedFlowsDir) lines.push('', '> [!NOTE]', '> New flows were recorded for screens that had none. A flows PR will follow after merge.')
@@ -448,6 +491,12 @@ function renderComment(s, { mapUrl, changesUrl, artifactUrl, shotUrl, shotsBase,
     s.baselineGeneratedAt ? `Compared against baseline \`${(s.baseSha ?? '').slice(0, 7)}\` from ${new Date(s.baselineGeneratedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC.` : null,
     `${A.length} added · ${M.length} changed · ${D.length} removed · ${dismissed.length} suspect${dismissed.length === 1 ? '' : 's'} cleared by looking.`,
     s.suspects.broadFiles?.length ? `${s.suspects.broadFiles.length} broadly-imported changed file${s.suspects.broadFiles.length === 1 ? '' : 's'} excluded from suspect marking.` : null,
+    // a capture OCR could not vouch for is worth saying out loud: it is the
+    // difference between "this is the screen" and "this is what the deep link
+    // rendered"
+    s.unverified?.length
+      ? `${s.unverified.length} deep link${s.unverified.length === 1 ? '' : 's'} did not appear to arrive (${s.unverified.map((u) => `\`${route(u.route)}\``).join(', ')}) — the capture may be a not-found screen.`
+      : null,
     artifactUrl ? `[Download the bundle](${artifactUrl}).` : null,
   ].filter(Boolean)
   lines.push('', '<details><summary>How these were captured</summary>', '', ...foot.map((f) => `- ${f}`), '', '</details>')
@@ -522,6 +571,32 @@ async function status() {
   } catch (e) { log(`status comment (${state}) skipped: ${e.message}`) }
 }
 
+// The local skill records into .screenmap/out/flows and tells you to gitignore
+// that directory; CI replays from config.flowsDir (.screenmap/flows). Nothing
+// moved them across, so "record locally, replay deterministically in CI" did
+// not actually work without copying files by hand.
+async function flowsAdopt() {
+  const project = path.resolve(opts.project ?? '.')
+  const config = loadConfig(project)
+  const from = path.resolve(project, opts.from ?? path.join('.screenmap', 'out', 'flows'))
+  const to = path.resolve(project, opts.to ?? config.flowsDir)
+  if (!exists(from)) { console.error(`nothing to adopt: ${path.relative(project, from)} does not exist`); process.exit(1) }
+  const names = fs.readdirSync(from).filter((f) => /\.(ya?ml|json)$/.test(f))
+  if (!names.length) { console.error(`nothing to adopt: no flows in ${path.relative(project, from)}`); process.exit(1) }
+  ensureDir(to)
+  const adopted = [], skipped = []
+  for (const n of names) {
+    const dest = path.join(to, n)
+    // a committed flow is reviewed code; replacing one silently is not our call
+    if (exists(dest) && !opts.force && fs.readFileSync(dest).compare(fs.readFileSync(path.join(from, n))) !== 0) { skipped.push(n); continue }
+    fs.copyFileSync(path.join(from, n), dest)
+    adopted.push(n)
+  }
+  console.log(JSON.stringify({ from: path.relative(project, from), to: path.relative(project, to), adopted, skipped }, null, 2))
+  if (skipped.length) console.error(`${skipped.length} flow(s) already exist and differ — pass --force to overwrite: ${skipped.join(', ')}`)
+  if (adopted.length) console.error(`adopted ${adopted.length} file(s) into ${path.relative(project, to)} — review and commit them`)
+}
+
 async function publish() {
   const repo = opts.repo ?? repoSlug()
   // a src that is a directory publishes every file under it, keeping the tree
@@ -556,6 +631,6 @@ async function resolveAppCmd() {
   console.log(JSON.stringify(res, null, 2))
 }
 
-const commands = { baseline, pr, comment, status, publish, 'flows-pr': flowsPr, 'resolve-app': resolveAppCmd, shot }
-if (!commands[cmd]) { console.error('usage: screenmap-ci <baseline|pr|comment|status|publish|flows-pr|resolve-app|shot> [options]'); process.exit(1) }
+const commands = { baseline, pr, comment, status, publish, 'flows-pr': flowsPr, 'flows-adopt': flowsAdopt, 'resolve-app': resolveAppCmd, shot }
+if (!commands[cmd]) { console.error('usage: screenmap-ci <baseline|pr|comment|status|publish|flows-pr|flows-adopt|resolve-app|shot> [options]'); process.exit(1) }
 commands[cmd]().catch((e) => { console.error('[screenmap-ci] failed:', e.message); process.exit(1) })

@@ -227,6 +227,18 @@ node screenmap-ci.mjs comment --summary ~/app/.screenmap/out/ci/pr/summary.json 
 
 While iterating, `--only id,id`, `--limit N`, `--no-agent` and `--no-sim` (static only) save a lot of waiting.
 
+### Adopting flows you recorded locally
+
+A local run writes flows to `.screenmap/out/flows`, which is generated output and gitignored. CI replays from `.screenmap/flows`, which is committed and reviewed. `flows-adopt` moves them across:
+
+```bash
+node screenmap-ci.mjs flows-adopt --project ~/app
+```
+
+It copies the YAML and its `.meta.json` sidecar, and refuses to overwrite a committed flow whose contents differ — pass `--force` when you mean to replace one. Review the result and commit it; from then on those screens replay deterministically, with no agent and no tokens.
+
+This is also the repair path when a flow drifts. A drifted flow is captured by deep link for that run and reported in the comment, but nothing re-records it unless an agent key is set, so re-record locally with `/screenmap`, adopt, and commit.
+
 ### Files the Action reads and writes
 
 | Path | Who uses it | What it holds |

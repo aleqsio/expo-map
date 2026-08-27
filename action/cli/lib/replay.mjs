@@ -92,6 +92,41 @@ export function landmarksOf(meta) {
 }
 
 // Decide whether a replay landed on its screen. Returns { ok, method, score }.
+// A deep link that resolves is not a deep link that arrived. expo-router
+// renders its not-found screen for /brew/1 when 1 is not a real id, the capture
+// succeeds, and nothing downstream can tell that from the real screen. This is
+// the same OCR the replay check uses, so it costs no tokens.
+//
+// Two references, strongest first:
+//   landmarks   the route's committed flow sidecar says what should be on screen
+//   bogus-param the same route opened with a value that cannot exist. If the
+//               real value and an impossible one render the same screen, the
+//               real one resolved no better than the impossible one.
+// A route with neither is reported unverified rather than guessed at.
+export async function verifyDeepLink({ shot, rec, probeBogus }) {
+  const seen = words(ocr(shot))
+  if (rec) {
+    const marks = landmarksOf(rec.meta)
+    if (marks.size >= 2) {
+      const explicit = Array.isArray(rec.meta.landmarks) && rec.meta.landmarks.length > 0
+      const c = containment(marks, seen)
+      const ok = explicit ? c >= (marks.size <= 3 ? 1 / marks.size : 0.34) - 1e-9 : c >= 0.15
+      return { ok, method: 'landmarks', score: Number(c.toFixed(2)) }
+    }
+  }
+  if (probeBogus) {
+    const p = await probeBogus()
+    if (p) {
+      const j = jaccard(seen, words(ocr(p)))
+      // Deliberately blunt: only near-identical text condemns a capture. An app
+      // that renders the same shell for any id trips this, which is a real
+      // ambiguity worth surfacing rather than a false positive to tune away.
+      return { ok: j < 0.9, method: 'bogus-param', score: Number(j.toFixed(2)) }
+    }
+  }
+  return { ok: true, method: 'unverified', score: null }
+}
+
 export async function verifyLanding({ shot, rec, udid, probe }) {
   // probe(): async () => path of a fresh deep-link capture of the same route (only used as fallback)
   let items = ocr(shot)
