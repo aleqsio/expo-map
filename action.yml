@@ -95,6 +95,19 @@ runs:
         ln -sfn "${{ github.action_path }}/action/cli/screenmap-ci.mjs" "${{ github.action_path }}/action/cli/screenmap-ci"
         npm install -g @swmansion/argent@0.21.0 --silent   # headless flow replay
 
+    # Claim the sticky comment before the slow part, so the PR says a map is
+    # coming instead of sitting silent for ~12 minutes. Every later state
+    # rewrites this same comment rather than adding another.
+    - name: Say the map is coming
+      if: inputs.mode == 'pr' && github.event.pull_request.number
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        screenmap-ci status --state pending --post \
+          --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" \
+          --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" || true
+
     - name: Install project dependencies
       shell: bash
       working-directory: ${{ inputs.project }}
@@ -177,6 +190,11 @@ runs:
         if [ "${{ inputs.mode }}" = "pr" ]; then
           if [ "${{ steps.baseline.outputs.found }}" != "true" ]; then
             echo "::warning::no baseline map found on ${{ inputs.screenmaps_branch }} — run the baseline workflow on main first; building a one-off baseline of the base commit is not supported yet"
+            # say so on the PR: a green job that posts nothing reads as "no screens changed"
+            screenmap-ci status --state no-baseline --post \
+              --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" \
+              --repo-url "${{ github.server_url }}/${{ github.repository }}" \
+              --branch "${{ inputs.screenmaps_branch }}" || true
             echo "bundle=" >> "$GITHUB_OUTPUT"; exit 0
           fi
           git fetch --depth 1 origin "${{ github.event.pull_request.base.sha }}" || true
@@ -270,3 +288,15 @@ runs:
             --title "screenmap: record flows for new screens" \
             --body "Flows recorded by the screenmap agent during the baseline refresh for screens that had no committed flow. Review the taps, then merge — future runs replay them deterministically (no LLM)."
         else echo "no new flows recorded"; fi
+
+    # Without this a crashed run leaves "mapping the screens…" on the PR
+    # forever, which is worse than saying nothing.
+    - name: Replace the pending comment if the run failed
+      if: failure() && inputs.mode == 'pr' && github.event.pull_request.number
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        screenmap-ci status --state failed --post \
+          --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" \
+          --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" || true

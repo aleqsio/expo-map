@@ -5,6 +5,8 @@
 //                      [--only id,id] [--limit N] [--no-agent] [--no-sim]
 //   screenmap-ci pr       --project <dir> --baseline <file.scrmap> [--base <sha>] [--head <sha>]
 //                      [--pr <n> --title <t> --url <u>] [--out <file>] [--no-agent]
+//   screenmap-ci status   --state pending|no-baseline|failed --pr <n> [--post] [--run-url U] [--repo-url U]
+//                      interim states for the sticky comment the result later replaces
 //   screenmap-ci comment  --summary <pr-summary.json> [--map-url U] [--changes-url U] [--artifact-url U] [--shots-base U]
 //                      [--post --repo owner/name --pr <n>]
 //   screenmap-ci publish  --repo owner/name [--branch screenmaps] --files src=dest[,src=dest…] --message "…"
@@ -464,6 +466,51 @@ async function comment() {
   } else console.log(body)
 }
 
+// Interim states for the same sticky comment the result later replaces. A PR
+// run takes ~12 minutes, so without this the PR sits silent and a reviewer has
+// no idea a map is coming; and when there is no baseline the job used to finish
+// green having said nothing at all, which reads as "no screens changed".
+const STATUS_BODIES = {
+  pending: ({ runUrl }) =>
+    [`### 🗺️ screenmap · mapping the screens this PR touches`, '',
+     'Capturing on a simulator now — this comment is replaced with the screens when it finishes, usually in about 12 minutes.',
+     runUrl ? `\n<sub>[Follow the run →](${runUrl})</sub>` : null].filter((l) => l !== null).join('\n'),
+
+  'no-baseline': ({ baselineWorkflow = 'screenmap-baseline.yml', branch = 'screenmaps', repoUrl }) =>
+    [`### 🗺️ screenmap · no baseline map yet`, '',
+     `There is no map of the base branch on \`${branch}\`, so there is nothing to compare this PR against.`,
+     '',
+     '**To fix:** run the baseline workflow once on the default branch — Actions → **screenmap · baseline** → *Run workflow*.' +
+       (repoUrl ? ` [Open it →](${repoUrl}/actions/workflows/${baselineWorkflow})` : ''),
+     '',
+     'Push to this PR again afterwards and the map will appear here.'].join('\n'),
+
+  failed: ({ runUrl }) =>
+    [`### 🗺️ screenmap · run failed`, '',
+     'The map could not be built for this commit, so there are no screens to show. The last successful map, if there was one, is unaffected.',
+     runUrl ? `\n<sub>[See the failing run →](${runUrl})</sub>` : null].filter((l) => l !== null).join('\n'),
+}
+
+async function status() {
+  const state = opts.state
+  const render = STATUS_BODIES[state]
+  if (!render) { console.error(`usage: screenmap-ci status --state <${Object.keys(STATUS_BODIES).join('|')}> [--pr N] [--run-url U]`); process.exit(1) }
+  const body = render({
+    runUrl: opts['run-url'] || null,
+    repoUrl: opts['repo-url'] || null,
+    branch: opts.branch,
+    baselineWorkflow: opts['baseline-workflow'],
+  })
+  if (!opts.post) { console.log(body); return }
+  const repo = opts.repo ?? repoSlug()
+  const number = Number(opts.pr)
+  // never let a status update be the thing that fails a run
+  try {
+    const how = upsertStickyComment({ repo, number, body })
+    log(`status comment (${state}) ${how} on ${repo}#${number}`)
+  } catch (e) { log(`status comment (${state}) skipped: ${e.message}`) }
+}
+
 async function publish() {
   const repo = opts.repo ?? repoSlug()
   // a src that is a directory publishes every file under it, keeping the tree
@@ -498,6 +545,6 @@ async function resolveAppCmd() {
   console.log(JSON.stringify(res, null, 2))
 }
 
-const commands = { baseline, pr, comment, publish, 'flows-pr': flowsPr, 'resolve-app': resolveAppCmd, shot }
-if (!commands[cmd]) { console.error('usage: screenmap-ci <baseline|pr|comment|publish|flows-pr|resolve-app|shot> [options]'); process.exit(1) }
+const commands = { baseline, pr, comment, status, publish, 'flows-pr': flowsPr, 'resolve-app': resolveAppCmd, shot }
+if (!commands[cmd]) { console.error('usage: screenmap-ci <baseline|pr|comment|status|publish|flows-pr|resolve-app|shot> [options]'); process.exit(1) }
 commands[cmd]().catch((e) => { console.error('[screenmap-ci] failed:', e.message); process.exit(1) })
