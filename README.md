@@ -85,11 +85,21 @@ You need all four of these:
 
      The Action reuses the newest finished EAS build whose [`@expo/fingerprint`](https://docs.expo.dev/versions/latest/sdk/fingerprint/) matches the checkout, so a JS-only PR never waits on a rebuild. When nothing matches, it runs `eas build` on Expo's infrastructure and waits.
 
-   - **Bring your own build.** Pass `app_path` pointing at a simulator `.app` an earlier step produced, from your own pipeline, a shared artifact, or anywhere else. EAS is skipped entirely.
-
      Get your `EXPO_TOKEN` from expo.dev under Account settings → Access tokens, and add it in your repo under Settings → Secrets and variables → Actions.
 
+   - **Bring your own build.** Pass `app_path` pointing at a simulator `.app` an earlier step produced, from your own pipeline, a shared artifact, or anywhere else. EAS is skipped entirely, and no `EXPO_TOKEN` is needed.
+
 3. **Optionally add an agent key** and pass it as `agent_api_key`. Without a key the Action stays deterministic: deep links and committed flows only, with no exploration and no per-screen notes. Claude Code is the default, and the alternatives are under [AI providers](#ai-providers).
+
+   The key is also what makes a bad capture recoverable. Nothing verifies that a deep link landed on the screen you meant, so a route that starts needing a param will quietly capture its own not-found state; the agent is told to check the link arrived and to find real params when it did not. How many screens it re-checks is the `effort` input:
+
+   | `effort` | The agent sees | Cost |
+   | --- | --- | --- |
+   | `fast` | only screens no committed flow can reach | cheapest, quickest |
+   | `balanced` (default) | also routes whose deep link guesses a param | a few screens more |
+   | `thorough` | every screen in the run | most accurate, most tokens |
+
+   `effort` also sets how far suspect marking follows imports (1, 2 and 3 hops). Anything set explicitly in `.screenmap/config.json` — `agent.scan`, `agent.maxScreens`, `suspects.depth` — overrides the preset.
 
 4. **Optionally commit two files** in the app repo:
 
@@ -123,7 +133,8 @@ In a monorepo, point the Action at the app with `project: apps/mobile`. On a pri
 | `project` | `.` | Path to the Expo project, relative to the repo root |
 | `agent_provider` | `claude` | `claude`, `codex`, `gemini` or `opencode`. See [AI providers](#ai-providers) |
 | `agent_api_key` | empty | Key for the chosen provider. Leave empty for deterministic-only runs |
-| `agent_max_screens` | `8` | How many screens the agent may explore in one run |
+| `effort` | `balanced` | `fast`, `balanced` or `thorough` — tokens and wall-clock against accuracy. See [Install](#install) step 3 |
+| `agent_max_screens` | empty | How many screens the agent may explore in one run. Empty uses the `effort` preset (6 / 8 / 24) |
 | `screenmaps_branch` | `screenmaps` | Orphan branch holding baseline maps and per-PR change bundles |
 | `publish` | `"true"` | Publish bundles to the `screenmaps` branch so the comment can deep-link the viewer. Needs `contents: write` |
 | `viewer_url` | `https://app.screenmap.dev` | Viewer origin used in comment links |

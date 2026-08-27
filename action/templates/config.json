@@ -1,14 +1,15 @@
 {
   "$comment": ".screenmap/config.json — mechanical knobs for the deterministic lane. All optional.",
+  "$effort": "fast | balanced (default) | thorough — token cost and speed vs accuracy. fast: agent only sees screens no flow can reach. balanced: also re-checks routes whose deep link guesses a param. thorough: every screen goes through the agent. Anything you set below wins over the preset.",
+  "effort": "balanced",
   "scheme": "myapp",
   "device": "iPhone 17 Pro",
   "appName": "myapp",
   "waits": { "transition": 2500, "network": 6000, "boot": 15000 },
-  "suspects": { "depth": 2, "broadCap": 8 },
+  "suspects": { "broadCap": 8 },
   "agent": {
-    "$comment": "provider: claude (default) | codex | gemini | opencode; or command: a bash template run instead ({promptFile} / $SCREENMAP_PROMPT_FILE carry the task), with keyEnv naming the env var it needs",
+    "$comment": "provider: claude (default) | codex | gemini | opencode; or command: a bash template run instead ({promptFile} / $SCREENMAP_PROMPT_FILE carry the task), with keyEnv naming the env var it needs. scan overrides the effort preset: unflowed | params | all",
     "enabled": true,
-    "maxScreens": 8,
     "provider": "claude"
   },
   "params": { "name": "bsky.app", "Profile.name": "bsky.app" }

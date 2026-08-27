@@ -90,10 +90,29 @@ async function captureRoutes({ project, config, scheme, session, routes, flows, 
       }
     }
   }
-  // agent lane: screens without any committed flow, within budget
-  if (agentEnabled && result.unflowed.length) {
+  // Agent lane, within budget. Which screens it sees comes from the effort
+  // preset (fast | balanced | thorough — see EFFORTS in lib/util.mjs), or from
+  // agent.scan set explicitly.
+  //
+  // Nothing verifies that a deep link landed anywhere sensible, so a route that
+  // starts needing a param captures its own not-found state and reports it as
+  // the screen. The agent is told to check the link actually arrived and to
+  // find real params when it did not, so handing it a screen is what makes that
+  // recoverable — which is the whole difference between the presets.
+  const scan = config.agent.scan
+  const unflowedIds = new Set(result.unflowed.map((r) => r.id))
+  const extra =
+    scan === 'all' ? routes.filter((r) => !unflowedIds.has(r.id))
+    : scan === 'params' ? routes.filter((r) => !unflowedIds.has(r.id) && r.params?.length)
+    : []
+  const candidates = [
+    ...result.unflowed,
+    ...extra.map((r) => ({ ...r, reason: scan === 'all' ? `re-checked (effort=${config.effort})` : "deep link guesses this route's param" })),
+  ]
+  if (agentEnabled && candidates.length) {
     const agentDir = ensureDir(path.join(work, 'agent'))
-    const screens = result.unflowed.map((r) => ({ id: r.id, urlPath: r.urlPath, slug: r.slug, file: r.file, deepLink: deepLinkFor(scheme, r, config.params), reason: r.reason }))
+    const screens = candidates.map((r) => ({ id: r.id, urlPath: r.urlPath, slug: r.slug, file: r.file, deepLink: deepLinkFor(scheme, r, config.params), reason: r.reason }))
+    if (extra.length) log(`effort=${config.effort} (scan=${scan}): ${result.unflowed.length} flowless + ${extra.length} re-checked`)
     const a = runAgent({
       projectDir: project, config, screens, scheme, udid: session.udid, bundleId: session.bundleId,
       outScreensDir: path.join(agentDir, 'screens'), outFlowsDir: path.join(agentDir, 'flows'),

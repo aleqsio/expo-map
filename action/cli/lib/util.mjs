@@ -34,18 +34,44 @@ export function parseArgs(argv) {
 
 // .screenmap/config.json — the purely mechanical knobs the deterministic lane
 // needs without an LLM. Everything is optional; these are the defaults.
+// One knob for the cost/accuracy trade, so nobody has to reason about
+// `scan` x `depth` x `maxScreens` to get a sensible run. Each preset only
+// supplies defaults: anything set explicitly in config.json still wins.
+//
+//   fast      deterministic lane only. The agent sees just the screens no
+//             committed flow can reach, and suspects stop one import hop out.
+//             Cheapest and quickest; a screen that starts needing a param will
+//             quietly capture its own not-found state.
+//   balanced  (default) also re-checks routes whose deep link is a guess built
+//             from config.params, which is where silent bad captures come from.
+//   thorough  every screen in the run goes through the agent, suspects reach
+//             three hops. Most accurate, most tokens, slowest.
+export const EFFORTS = {
+  fast: { agent: { scan: 'unflowed', maxScreens: 6 }, suspects: { depth: 1 } },
+  balanced: { agent: { scan: 'params', maxScreens: 8 }, suspects: { depth: 2 } },
+  thorough: { agent: { scan: 'all', maxScreens: 24 }, suspects: { depth: 3 } },
+}
+
 export function loadConfig(projectDir) {
-  const defaults = {
+  const base = {
     scheme: null, bundleId: null, appPath: null, device: 'iPhone 16 Pro', metroPort: 8081,
     waits: { transition: 2500, network: 6000, boot: 15000 },
-    suspects: { depth: 2, broadCap: 8 },
-    agent: { enabled: true, maxScreens: 8, model: null, provider: null, command: null, keyEnv: null },
+    suspects: { broadCap: 8 },
+    agent: { enabled: true, model: null, provider: null, command: null, keyEnv: null },
     flowsDir: '.screenmap/flows', skillFile: '.screenmap/SKILL.md',
     params: {},
   }
   const user = readJson(path.join(projectDir, '.screenmap', 'config.json'), {})
+  const effort = process.env.SCREENMAP_EFFORT || user.effort || 'balanced'
+  const preset = EFFORTS[effort]
+  if (!preset) throw new Error(`unknown effort "${effort}" — expected ${Object.keys(EFFORTS).join(' | ')}`)
+  const defaults = {
+    ...base, effort,
+    suspects: { ...base.suspects, ...preset.suspects },
+    agent: { ...base.agent, ...preset.agent },
+  }
   const merged = {
-    ...defaults, ...user,
+    ...defaults, ...user, effort,
     waits: { ...defaults.waits, ...(user.waits ?? {}) },
     suspects: { ...defaults.suspects, ...(user.suspects ?? {}) },
     agent: { ...defaults.agent, ...(user.agent ?? {}) },

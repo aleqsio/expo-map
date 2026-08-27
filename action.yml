@@ -24,9 +24,18 @@ inputs:
   agent_api_key:
     description: API key for the chosen agent provider (mapped to the env var it expects). Leave empty for deterministic-only runs.
     default: ""
+  effort:
+    description: >-
+      How hard to work, trading tokens and wall-clock against accuracy:
+      fast (deterministic lane only — cheapest, but a screen that starts needing a param
+      quietly captures its own not-found state), balanced (default — also re-checks routes
+      whose deep link is a guess, which is where silent bad captures come from), or
+      thorough (every screen goes through the agent). Overridden by anything set explicitly
+      in .screenmap/config.json.
+    default: balanced
   agent_max_screens:
-    description: Cap on screens the agent may explore per run
-    default: "8"
+    description: Cap on screens the agent may explore per run. Empty uses the effort preset's cap (fast 6, balanced 8, thorough 24).
+    default: ""
   screenmaps_branch:
     description: Orphan branch that stores baseline maps and per-PR change bundles
     default: screenmaps
@@ -145,6 +154,7 @@ runs:
       shell: bash
       env:
         AGENT_PROVIDER: ${{ inputs.agent_provider }}
+        SCREENMAP_EFFORT: ${{ inputs.effort }}
         AGENT_MAX_SCREENS: ${{ inputs.agent_max_screens }}
         AGENT_API_KEY: ${{ inputs.agent_api_key }}
         SCREENMAP_APP_PATH: ${{ steps.app.outputs.app }}
