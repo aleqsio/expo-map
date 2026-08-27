@@ -25,6 +25,9 @@ function approveScheme(udid, scheme, bundleId) {
 function muteDevMenu(udid, bundleId) {
   shOk('xcrun', ['simctl', 'spawn', udid, 'defaults', 'write', bundleId, 'EXDevMenuIsOnboardingFinished', '-bool', 'true'])
   shOk('xcrun', ['simctl', 'spawn', udid, 'defaults', 'write', bundleId, 'EXDevMenuShowsAtLaunch', '-bool', 'false'])
+  // expo-dev-menu 57 added a floating gear that defaults to on and lands in the
+  // top-right of every capture, over page titles
+  shOk('xcrun', ['simctl', 'spawn', udid, 'defaults', 'write', bundleId, 'EXDevMenuShowFloatingActionButton', '-bool', 'false'])
 }
 
 // Belt-and-braces for the same prompt: OCR the screen and tap "Open".

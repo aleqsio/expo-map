@@ -101,6 +101,10 @@ async function captureRoutes({ project, config, scheme, session, routes, flows, 
       mode: agentMode, prContext,
     })
     result.agentRun = a
+    // the comment footer says why the agent sat out; the log should too, or a
+    // run that quietly explored nothing looks identical to one that had nothing
+    // to explore
+    if (!a.ran) log(`agent: not run — ${a.reason} (${screens.length} screen(s) had no flow)`)
     if (a.ran) {
       // agent captures supersede deep-link ones for the screens it handled
       for (const id of a.summary.captured ?? []) {

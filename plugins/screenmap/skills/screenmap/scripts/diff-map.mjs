@@ -54,15 +54,40 @@ if (cmd === 'suspects') {
   // means a route isn't flagged, and broad-file reporting keeps us honest.
   const EXT = ['.tsx', '.ts', '.jsx', '.js']
   const aliases = [] // [{prefix, targets: [repoRelPrefix]}]
-  // tsconfig.json is JSONC in the wild — strip comments and trailing commas
+  // tsconfig.json is JSONC in the wild — strip comments and trailing commas.
+  // The stripper has to be string-aware: a regex sweep for /*…*/ eats the whole
+  // `paths` block of a stock Expo tsconfig, because "@/*" opens a comment and
+  // the "**/*.ts" in `include` closes it. That parsed to {}, left `aliases`
+  // empty, and silently reduced suspects to "route files literally edited".
+  const stripJsonc = (src) => {
+    let out = '', inStr = false, esc = false, line = false, block = false
+    for (let i = 0; i < src.length; i++) {
+      const c = src[i], n = src[i + 1]
+      if (line) { if (c === '\n') { line = false; out += c } continue }
+      if (block) { if (c === '*' && n === '/') { block = false; i++ } continue }
+      if (inStr) {
+        out += c
+        if (esc) esc = false
+        else if (c === '\\') esc = true
+        else if (c === '"') inStr = false
+        continue
+      }
+      if (c === '"') { inStr = true; out += c; continue }
+      if (c === '/' && n === '/') { line = true; i++; continue }
+      if (c === '/' && n === '*') { block = true; i++; continue }
+      out += c
+    }
+    return out.replace(/,(\s*[}\]])/g, '$1')
+  }
   const readJsonc = (p) => {
-    try {
-      const src = fs.readFileSync(p, 'utf8')
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/^\s*\/\/.*$/gm, '')
-        .replace(/,(\s*[}\]])/g, '$1')
-      return JSON.parse(src)
-    } catch { return {} }
+    let src
+    try { src = fs.readFileSync(p, 'utf8') } catch { return {} }
+    try { return JSON.parse(stripJsonc(src)) } catch {}
+    // a stripper bug must not silently cost us every alias — the raw text is
+    // valid JSON far more often than not
+    try { return JSON.parse(src) } catch {}
+    console.error(`warning: cannot parse ${path.relative(project, p) || p} — import-based suspect marking will be limited to directly-edited files`)
+    return {}
   }
   const tsconfig = readJsonc(path.join(project, 'tsconfig.json'))
   for (const [pat, targets] of Object.entries(tsconfig.compilerOptions?.paths ?? {})) {
@@ -74,6 +99,10 @@ if (cmd === 'suspects') {
     if (typeof t === 'string' && t.startsWith('.'))
       aliases.push({ prefix: pat.replace(/\*$/, ''), targets: [t.replace(/\*$/, '').replace(/^\.\//, '')] })
   }
+  // Losing the aliases costs every `@/…` import and so every `import-touched`
+  // suspect, but the run still succeeds and reports fewer screens. Say so.
+  if (Object.keys(tsconfig.compilerOptions?.paths ?? {}).length && !aliases.length)
+    console.error('warning: tsconfig declares compilerOptions.paths but no aliases were built — aliased imports will not resolve')
 
   const fileExists = (p) => { try { return fs.statSync(p).isFile() } catch { return false } }
   const resolveToRel = (candidate) => {

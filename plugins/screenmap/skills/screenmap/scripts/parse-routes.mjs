@@ -42,6 +42,84 @@ function rel(p) {
   return path.relative(projectRoot, p).split(path.sep).join('/')
 }
 
+function readFileOrNull(p) {
+  try { return fs.readFileSync(p, 'utf8') } catch { return null }
+}
+
+// tsconfig.json is JSONC in the wild. The stripper must be string-aware: a
+// plain /*…*/ sweep eats a stock Expo `paths` block, because "@/*" opens a
+// comment and the "**/*.ts" in `include` closes it.
+function stripJsonc(src) {
+  let out = '', inStr = false, esc = false, line = false, block = false
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i], n = src[i + 1]
+    if (line) { if (c === '\n') { line = false; out += c } continue }
+    if (block) { if (c === '*' && n === '/') { block = false; i++ } continue }
+    if (inStr) {
+      out += c
+      if (esc) esc = false
+      else if (c === '\\') esc = true
+      else if (c === '"') inStr = false
+      continue
+    }
+    if (c === '"') { inStr = true; out += c; continue }
+    if (c === '/' && n === '/') { line = true; i++; continue }
+    if (c === '/' && n === '*') { block = true; i++; continue }
+    out += c
+  }
+  return out.replace(/,(\s*[}\]])/g, '$1')
+}
+
+const IMPORT_EXT = ['.tsx', '.ts', '.jsx', '.js']
+let _aliases = null
+function pathAliases() {
+  if (_aliases) return _aliases
+  _aliases = []
+  const src = readFileOrNull(path.join(projectRoot, 'tsconfig.json'))
+  if (src) {
+    let cfg = null
+    try { cfg = JSON.parse(stripJsonc(src)) } catch { try { cfg = JSON.parse(src) } catch {} }
+    for (const [pat, targets] of Object.entries(cfg?.compilerOptions?.paths ?? {}))
+      _aliases.push({ prefix: pat.replace(/\*$/, ''), targets: targets.map((t) => t.replace(/\*$/, '').replace(/^\.\//, '')) })
+  }
+  return _aliases
+}
+
+function resolveToRel(candidate) {
+  for (const suffix of ['', ...IMPORT_EXT, ...IMPORT_EXT.map((e) => '/index' + e)]) {
+    const c = candidate + suffix
+    try { if (fs.statSync(path.join(projectRoot, c)).isFile()) return c } catch {}
+  }
+  return null
+}
+
+// repo-relative targets of a file's first-party imports; bare package imports
+// resolve to null and drop out
+function firstPartyImports(src, fromRel) {
+  const specs = [
+    ...src.matchAll(/(?:^|\n)\s*(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]/g),
+    ...src.matchAll(/(?:require|import)\(\s*['"]([^'"]+)['"]\s*\)/g),
+  ].map((m) => m[1])
+  const out = []
+  for (const spec of new Set(specs)) {
+    let hit = null
+    if (spec.startsWith('.')) {
+      hit = resolveToRel(path.posix.normalize(path.posix.join(path.posix.dirname(fromRel), spec)))
+    } else {
+      for (const a of pathAliases()) {
+        if (!spec.startsWith(a.prefix)) continue
+        for (const t of a.targets) {
+          hit = resolveToRel(path.posix.normalize(t + spec.slice(a.prefix.length)))
+          if (hit) break
+        }
+        if (hit) break
+      }
+    }
+    if (hit) out.push(hit)
+  }
+  return out
+}
+
 function readScheme() {
   try {
     const cfg = JSON.parse(fs.readFileSync(path.join(projectRoot, 'app.json'), 'utf8'))
@@ -178,11 +256,35 @@ function parseExpoRouter(appDir) {
   const PATHNAME_RE = /pathname\s*:\s*["'`]([^"'`]+)["'`]/g
   const ROUTER_RE = /(?:router|navigation)\.(?:push|replace|navigate)\(\s*["'`]([^"'`]+)["'`]/g
 
+  // A route's own source is not where its links live in ordinary code: put the
+  // <Link> in a list-item component and the screen reads as unreachable. So the
+  // scan follows each route's first-party imports one hop.
+  //
+  // One hop, and not into shared chrome: a header or tab bar imported by most
+  // screens would otherwise attribute its links to every one of them and turn
+  // the graph into a hairball. Files imported by more than IMPORT_FANOUT_CAP
+  // routes are treated as chrome and skipped.
+  const IMPORT_FANOUT_CAP = 8
+  const importsOfRoute = new Map() // route.id → [repo-rel file]
+  const fanout = new Map() // repo-rel file → route count
+  for (const r of routes) {
+    const own = firstPartyImports(r._src, r.file)
+    importsOfRoute.set(r.id, own)
+    for (const f of new Set(own)) fanout.set(f, (fanout.get(f) ?? 0) + 1)
+  }
+
   const edges = []
   for (const r of routes) {
     const raws = new Set()
-    for (const re of [HREF_RE, PATHNAME_RE, ROUTER_RE])
-      for (const m of r._src.matchAll(re)) raws.add(m[1])
+    const sources = [r._src]
+    for (const f of importsOfRoute.get(r.id) ?? []) {
+      if ((fanout.get(f) ?? 0) > IMPORT_FANOUT_CAP) continue
+      const s = readFileOrNull(path.join(projectRoot, f))
+      if (s) sources.push(s)
+    }
+    for (const src of sources)
+      for (const re of [HREF_RE, PATHNAME_RE, ROUTER_RE])
+        for (const m of src.matchAll(re)) raws.add(m[1])
     for (const raw of raws) {
       let t = raw.split(/[?#]/)[0]
       if (/^(https?|mailto|tel):/.test(t)) continue
@@ -351,6 +453,20 @@ if (appDir) {
 }
 
 const scheme = readScheme()
+// routes nothing links to. The root is every app's entry point, so it never
+// counts; neither does a tab or drawer child, which the navigator reaches by
+// structure rather than by a link. (Stack children do not get that pass — a
+// pushed screen needs something to push it.)
+const linkedTo = new Set(parsed.edges.map((e) => e.to).filter(Boolean))
+const structural = (r) =>
+  /tab|drawer/i.test(r.navigator ?? '') ||
+  /\([^)]*(?:tabs?|drawer)[^)]*\)/i.test(`${r.id}/${r.layoutDir ?? ''}`) ||
+  // expo-router specials (+not-found, +html, _sitemap) are reached by the
+  // router itself, never by a link
+  r.id.split('/').some((s) => s.startsWith('+') || s.startsWith('_'))
+const orphans = parsed.routes.filter(
+  (r) => r.urlPath !== '/' && !linkedTo.has(r.id) && !structural(r)
+)
 const graph = {
   generatedAt: new Date().toISOString(),
   projectRoot,
@@ -368,6 +484,7 @@ const graph = {
     unresolvedEdges: parsed.edges.filter((e) => e.to == null).length,
     routesWithStateHints: parsed.routes.filter((r) => r.stateHints.length > 0).length,
     routesNeedingParams: parsed.routes.filter((r) => r.params.length > 0).length,
+    orphanRoutes: orphans.length,
   },
 }
 
@@ -375,3 +492,9 @@ fs.mkdirSync(path.dirname(outPath), { recursive: true })
 fs.writeFileSync(outPath, JSON.stringify(graph, null, 2))
 console.log(`wrote ${outPath}`)
 console.log(JSON.stringify(graph.summary))
+// A screen nothing links to is usually the parser missing the link, not the app
+// missing the route — `href={item.href}` and other computed targets cannot be
+// resolved statically. Say so, so a sparse map reads as a known limitation
+// rather than as the truth about the app.
+if (orphans.length)
+  console.error(`note: ${orphans.length} route(s) have no incoming link and may just be links this parser cannot read (e.g. computed href): ${orphans.map((r) => r.urlPath).join(', ')}`)
