@@ -143,7 +143,9 @@ You need all four of these:
 
    **`.screenmap/SKILL.md`** is the app-specific guidance: how to log in, which ids are real, which controls to leave alone, how long screens take to settle. The agent reads it before it explores. Start from [`action/templates/SCREENMAP_SKILL.md`](action/templates/SCREENMAP_SKILL.md).
 
-5. **Run the baseline workflow once** through `workflow_dispatch`, so pull requests have something to diff against. It publishes `main/<sha>.scrmap` and `main/latest.scrmap` to an orphan `screenmaps` branch.
+5. **Open a pull request.** Pull requests are diffed against a baseline map of the default branch, published as `main/<sha>.scrmap` and `main/latest.scrmap` on an orphan `screenmaps` branch. You do not have to build that first map: when a PR run finds none, it starts the baseline workflow itself and re-runs the PR once that finishes.
+
+   The Action dispatches rather than mapping inline, because a full map takes roughly twenty minutes and waiting for it inside the PR job would bill that at the macOS rate for nothing. This needs `actions: write` on both workflows and a `workflow_dispatch` trigger on the baseline one, which the templates have. Set `auto_baseline: "false"` to have a PR report the missing baseline instead, and run it yourself through `workflow_dispatch`.
 
 In a monorepo, point the Action at the app with `project: apps/mobile`. On a private repo, set `publish: "false"`, because raw GitHub URLs are not anonymously readable there. The comment then links the workflow artifact, which you download and drop into the viewer yourself.
 
@@ -172,6 +174,8 @@ In a monorepo, point the Action at the app with `project: apps/mobile`. On a pri
 | `agent_api_key` | empty | Key for the chosen provider. Leave empty for deterministic-only runs |
 | `effort` | `balanced` | `fast`, `balanced` or `thorough` — tokens and wall-clock against accuracy. See [Install](#install) step 3 |
 | `agent_max_screens` | empty | How many screens the agent may explore in one run. Empty uses the `effort` preset (6 / 8 / 24) |
+| `auto_baseline` | `"true"` | (pr) Start the baseline workflow when no map exists yet, instead of asking for it. Needs `actions: write` |
+| `baseline_workflow` | `screenmap-baseline.yml` | (pr) Which workflow to start when no baseline exists |
 | `screenmaps_branch` | `screenmaps` | Orphan branch holding baseline maps and per-PR change bundles |
 | `publish` | `"true"` | Publish bundles to the `screenmaps` branch so the comment can deep-link the viewer. Needs `contents: write` |
 | `viewer_url` | `https://app.screenmap.dev` | Viewer origin used in comment links |

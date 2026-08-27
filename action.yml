@@ -36,6 +36,15 @@ inputs:
   agent_max_screens:
     description: Cap on screens the agent may explore per run. Empty uses the effort preset's cap (fast 6, balanced 8, thorough 24).
     default: ""
+  auto_baseline:
+    description: >-
+      (pr) When no baseline map exists, start the baseline workflow on the default branch instead of
+      asking the reader to run it. Needs actions: write on the PR workflow, and the baseline workflow
+      must have a workflow_dispatch trigger. Set false to only report the missing baseline.
+    default: "true"
+  baseline_workflow:
+    description: (pr) Filename of the baseline workflow to start when no baseline exists
+    default: screenmap-baseline.yml
   screenmaps_branch:
     description: Orphan branch that stores baseline maps and per-PR change bundles
     default: screenmaps
@@ -189,12 +198,45 @@ runs:
         mkdir -p "$proj/.screenmap" && [ -f "$proj/.screenmap/config.json" ] || true
         if [ "${{ inputs.mode }}" = "pr" ]; then
           if [ "${{ steps.baseline.outputs.found }}" != "true" ]; then
-            echo "::warning::no baseline map found on ${{ inputs.screenmaps_branch }} — run the baseline workflow on main first; building a one-off baseline of the base commit is not supported yet"
-            # say so on the PR: a green job that posts nothing reads as "no screens changed"
-            screenmap-ci status --state no-baseline --post \
-              --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" \
-              --repo-url "${{ github.server_url }}/${{ github.repository }}" \
-              --branch "${{ inputs.screenmaps_branch }}" || true
+            # The baseline is a prerequisite we can satisfy ourselves. Start it
+            # on the default branch rather than telling the reader to go and
+            # click it. We dispatch instead of mapping inline: a full map is
+            # ~20 minutes, and waiting for it here would bill that at the macOS
+            # rate while this job sits idle. The baseline job re-runs open PRs
+            # when it finishes, so the loop closes without anyone pushing.
+            started=""
+            if [ "${{ inputs.auto_baseline }}" = "true" ]; then
+              wf="${{ inputs.baseline_workflow }}"
+              branch="${{ github.event.repository.default_branch }}"
+              # don't stack dispatches if one is already on its way
+              running=$(gh run list --repo "${{ github.repository }}" --workflow "$wf" \
+                          --status in_progress --json databaseId -q 'length' 2>/dev/null || echo 0)
+              queued=$(gh run list --repo "${{ github.repository }}" --workflow "$wf" \
+                          --status queued --json databaseId -q 'length' 2>/dev/null || echo 0)
+              if [ "$running" = "0" ] && [ "$queued" = "0" ]; then
+                if gh workflow run "$wf" --repo "${{ github.repository }}" --ref "$branch" 2>/dev/null; then
+                  started="yes"; echo "dispatched $wf on $branch"
+                else
+                  echo "::warning::could not start $wf automatically — the workflow needs actions: write, and $wf must have a workflow_dispatch trigger"
+                fi
+              else
+                started="yes"; echo "$wf is already running"
+              fi
+            fi
+            if [ -n "$started" ]; then
+              sleep 4  # let the run register so the link resolves
+              url=$(gh run list --repo "${{ github.repository }}" --workflow "${{ inputs.baseline_workflow }}" --limit 1 --json url -q '.[0].url' 2>/dev/null || echo "")
+              screenmap-ci status --state baseline-started --post \
+                --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" \
+                ${url:+--run-url "$url"} || true
+            else
+              echo "::warning::no baseline map found on ${{ inputs.screenmaps_branch }} — run the baseline workflow on the default branch first"
+              # say so on the PR: a green job that posts nothing reads as "no screens changed"
+              screenmap-ci status --state no-baseline --post \
+                --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" \
+                --repo-url "${{ github.server_url }}/${{ github.repository }}" \
+                --branch "${{ inputs.screenmaps_branch }}" || true
+            fi
             echo "bundle=" >> "$GITHUB_OUTPUT"; exit 0
           fi
           git fetch --depth 1 origin "${{ github.event.pull_request.base.sha }}" || true
@@ -288,6 +330,30 @@ runs:
             --title "screenmap: record flows for new screens" \
             --body "Flows recorded by the screenmap agent during the baseline refresh for screens that had no committed flow. Review the taps, then merge — future runs replay them deterministically (no LLM)."
         else echo "no new flows recorded"; fi
+
+    # The other half of auto_baseline: a PR that stopped for a missing baseline
+    # is waiting on this job, so re-run it rather than making someone push an
+    # empty commit. Only PRs whose latest screenmap run produced no bundle are
+    # touched, so ordinary PRs are left alone.
+    - name: Re-run PRs that were waiting for this baseline
+      if: inputs.mode == 'baseline' && steps.run.outputs.bundle != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        repo="${{ github.repository }}"
+        for pr in $(gh pr list --repo "$repo" --state open --json number -q '.[].number' 2>/dev/null); do
+          branch=$(gh pr view "$pr" --repo "$repo" --json headRefName -q .headRefName 2>/dev/null || true)
+          [ -n "$branch" ] || continue
+          run=$(gh run list --repo "$repo" --branch "$branch" --event pull_request --limit 20 \
+                  --json databaseId,workflowName \
+                  -q "[.[] | select(.workflowName | test(\"screenmap\"; \"i\"))] | .[0].databaseId" 2>/dev/null || true)
+          [ -n "$run" ] && [ "$run" != "null" ] || continue
+          # only the ones that bailed out with no bundle, i.e. were waiting on us
+          if gh run view "$run" --repo "$repo" --log 2>/dev/null | grep -q "no baseline map found\|dispatched .*baseline\|is already running"; then
+            gh run rerun "$run" --repo "$repo" 2>/dev/null && echo "re-ran PR #$pr ($run)" || echo "could not re-run PR #$pr"
+          fi
+        done
 
     # Without this a crashed run leaves "mapping the screens…" on the PR
     # forever, which is worse than saying nothing.

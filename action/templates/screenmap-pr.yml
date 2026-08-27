@@ -9,6 +9,7 @@ concurrency:
 permissions:
   contents: write        # push bundles to the screenmaps branch (set publish: false to drop this)
   pull-requests: write   # sticky comment
+  actions: write         # start the baseline workflow if no map exists yet
 jobs:
   changes:
     runs-on: macos-26

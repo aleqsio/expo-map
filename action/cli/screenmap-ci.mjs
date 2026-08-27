@@ -485,6 +485,16 @@ const STATUS_BODIES = {
      '',
      'Push to this PR again afterwards and the map will appear here.'].join('\n'),
 
+  // The baseline is a prerequisite we can satisfy ourselves, so the default is
+  // to start it rather than hand the reader a chore. It maps the whole app, so
+  // it is slower than the PR runs that follow.
+  'baseline-started': ({ runUrl, minutes = 20 }) =>
+    [`### 🗺️ screenmap · building the first map`, '',
+     `This repo had no baseline to compare against, so one is being built from the default branch now. It maps every screen, so it takes longer than a normal run — roughly ${minutes} minutes.`,
+     '',
+     'This PR is mapped automatically as soon as it finishes. Nothing for you to do.',
+     runUrl ? `\n<sub>[Follow the baseline run →](${runUrl})</sub>` : null].filter((l) => l !== null).join('\n'),
+
   failed: ({ runUrl }) =>
     [`### 🗺️ screenmap · run failed`, '',
      'The map could not be built for this commit, so there are no screens to show. The last successful map, if there was one, is unaffected.',
@@ -500,6 +510,7 @@ async function status() {
     repoUrl: opts['repo-url'] || null,
     branch: opts.branch,
     baselineWorkflow: opts['baseline-workflow'],
+    minutes: opts.minutes,
   })
   if (!opts.post) { console.log(body); return }
   const repo = opts.repo ?? repoSlug()
