@@ -67,6 +67,16 @@ workflow scope`. Anyone following the setup instructions with an agent hits it
 at the first push. One line on the page: `gh auth refresh -s workflow`, or push
 over SSH.
 
+## Deploy the site with the global Vercel CLI, not `npx`
+
+`npx vercel` fetches CLI 59.7.0, which fails every deploy from this machine with
+`Not authorized`. The globally installed 54.6.1 (`~/Library/pnpm/bin/vercel`)
+works with no `--scope` and no re-linking. Both `.vercel/project.json` files are
+correct: a personal Vercel account is represented internally as a `team_...` id,
+so `team_cgCiwy8h4rZHlZiUQyGT4qCb` is right and not stale.
+
+    cd site && vercel --prod
+
 ## Rotate `EXPO_TOKEN`
 
 The token for `aleqsio/screenmap-test` was pasted in plaintext into a Claude
