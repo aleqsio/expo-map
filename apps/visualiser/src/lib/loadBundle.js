@@ -110,32 +110,57 @@ function loadDiffBundle(files, manifest, text) {
   return { manifest, map: { nodes, edges, flows: [] }, images, diff }
 }
 
-// Overlay a diff bundle on a full .scrmap of the same app: every node keeps its
-// diff annotation, but nodes the diff didn't capture (unchanged screens) borrow
-// their screenshot and state variants from the plain bundle. Image keys don't
+// Do these two bundles describe the same app? Names alone are too strict a
+// test: a .scrmap takes app.name from the app config ("Brew") while a
+// .diff.scrmap takes it from the repo ("screenmap-test"), so the identical
+// pair a PR comment links to failed to match and Changes lost its backdrop.
+// Any one of shared commit provenance, URL scheme, or name is enough.
+export function sameApp(plain, diff) {
+  const norm = (v) => (typeof v === 'string' && v.trim() ? v.trim().toLowerCase() : null)
+  const commit = norm(plain.manifest.source?.commit)
+  const sides = [norm(diff.manifest.base?.commit), norm(diff.manifest.head?.commit)]
+  if (commit && sides.includes(commit)) return true
+  const a = plain.manifest.app ?? {}
+  const b = diff.manifest.app ?? {}
+  if (norm(a.scheme) && norm(a.scheme) === norm(b.scheme)) return true
+  return !!norm(a.name) && norm(a.name) === norm(b.name)
+}
+
+// Build the graph the Changes view renders. Every node keeps its diff
+// annotation; a node the diff carries no capture for is an unchanged screen
+// the PR could not have touched, not a missing one, so it borrows a shot —
+// from the map bundle when one is loaded, otherwise from its own base side.
+// Only a node that no bundle has a shot for keeps the "no capture" state.
+//
+// `plain` may be null: a .diff.scrmap opened on its own still gets the
+// base-side fallback, it just has no map to borrow from. Image keys don't
 // collide — plain uses "screens/…", diff uses "base|head/screens/…".
 export function mergeBundles(plain, diff) {
-  const plainById = new Map(plain.map.nodes.map((n) => [n.id, n]))
+  const plainById = new Map((plain?.map.nodes ?? []).map((n) => [n.id, n]))
   const nodes = diff.map.nodes.map((n) => {
-    const p = plainById.get(n.id)
-    if (!p) return n
-    const capture = n.capture.screenshot
-      ? n.capture
-      : { ...p.capture, states: p.capture.states ?? [] }
-    // union state variants by name; diff-side (head) wins on collision
-    const have = new Set((capture.states ?? []).map((s) => s.name))
-    const states = [
-      ...(capture.states ?? []),
-      ...(capture === n.capture ? (p.capture.states ?? []).filter((s) => !have.has(s.name)) : []),
-    ].sort((a, b) => a.name.localeCompare(b.name))
-    return { ...n, capture: { ...capture, states } }
+    const p = plainById.get(n.id) ?? null
+    if (n.capture.screenshot) {
+      if (!p) return n
+      // union state variants by name; diff-side (head) wins on collision
+      const have = new Set((n.capture.states ?? []).map((s) => s.name))
+      const states = [
+        ...(n.capture.states ?? []),
+        ...(p.capture.states ?? []).filter((s) => !have.has(s.name)),
+      ].sort((a, b) => a.name.localeCompare(b.name))
+      return { ...n, capture: { ...n.capture, states } }
+    }
+    const donor = p?.capture?.screenshot ? p.capture : n.captureBase?.screenshot ? n.captureBase : null
+    if (!donor) return n
+    // A borrowed shot is evidence from one side only, so there is nothing for
+    // the base⇄head comparator to alternate between.
+    return { ...n, capture: { ...donor, states: donor.states ?? [] }, captureBase: null }
   })
   return {
     manifest: diff.manifest,
     map: { nodes, edges: diff.map.edges, flows: [] },
-    images: new Map([...plain.images, ...diff.images]),
+    images: new Map([...(plain?.images ?? []), ...diff.images]),
     diff: diff.diff,
-    backdrop: plain.manifest,
+    backdrop: plain?.manifest ?? null,
   }
 }
 

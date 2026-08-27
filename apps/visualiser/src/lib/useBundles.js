@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { loadBundle, mergeBundles } from './loadBundle'
+import { loadBundle, mergeBundles, sameApp } from './loadBundle'
 
 // A viewer session holds up to two bundles: the Map (a plain .scrmap) and the
 // Changes overlay (a .diff.scrmap). When both describe the same app, Changes
@@ -152,25 +152,29 @@ export function useBundles() {
     }
   }, [open])
 
+  // Is there a map to lay the overlay over? Only then does the Changes view get
+  // the map's captures behind it; without one it still resolves what it can
+  // from the diff's own base side.
+  const overlaid = useMemo(() => !!(plain && changes && sameApp(plain, changes)), [plain, changes])
   const merged = useMemo(
-    () => (plain && changes && plain.manifest.app.name === changes.manifest.app.name ? mergeBundles(plain, changes) : null),
-    [plain, changes]
+    () => (changes ? mergeBundles(overlaid ? plain : null, changes) : null),
+    [plain, changes, overlaid]
   )
 
   // what the graph renders for the current mode
   const bundle = useMemo(() => {
-    if (mode === 'changes' && changes) return merged ?? changes
+    if (mode === 'changes' && merged) return merged
     if (plain) return plain
-    if (changes) {
+    if (merged) {
       // Map view of a lone Changes bundle: the head graph, undecorated
-      return { ...changes, diff: null, map: { ...changes.map, nodes: changes.map.nodes.filter((n) => n.diff?.status !== 'D') } }
+      return { ...merged, diff: null, map: { ...merged.map, nodes: merged.map.nodes.filter((n) => n.diff?.status !== 'D') } }
     }
     return null
-  }, [mode, plain, changes, merged])
+  }, [mode, plain, merged])
 
   return {
     plain, changes, bundle, mode, setMode,
-    hasChanges: !!changes, overlaid: !!merged,
+    hasChanges: !!changes, overlaid,
     open, closeChanges, loadDemo, busy, error, demoAvailable, gen,
   }
 }

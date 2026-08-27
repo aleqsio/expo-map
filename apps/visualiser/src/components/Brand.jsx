@@ -16,11 +16,13 @@ export function Mark({ className }) {
   )
 }
 
-export function Wordmark({ className }) {
+// `labelClassName` is for callers tight on width: hide the name and the mark
+// still signs the page, the way the favicon does.
+export function Wordmark({ className, labelClassName }) {
   return (
-    <span className={cn('inline-flex items-center gap-2 text-primary', className)}>
+    <span className={cn('inline-flex shrink-0 items-center gap-2 text-primary', className)}>
       <Mark />
-      <span className="font-heading text-[15px] font-bold tracking-[-0.03em] text-foreground">screenmap</span>
+      <span className={cn('font-heading text-[15px] font-bold tracking-[-0.03em] text-foreground', labelClassName)}>screenmap</span>
     </span>
   )
 }

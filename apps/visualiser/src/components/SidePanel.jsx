@@ -19,9 +19,10 @@ export function RowMark({ kind }) {
 }
 
 export default function SidePanel({ title, count, open, onToggle, items, footer }) {
+  // The top offset clears the top bar, which stacks into two rows below 520px.
   return (
     <aside
-      className="panel pointer-events-auto absolute left-4 top-[88px] z-10 flex w-[252px] max-h-[calc(100%-118px)] flex-col animate-in fade-in-0 slide-in-from-top-2 duration-400 delay-75 fill-mode-both"
+      className="panel pointer-events-auto absolute left-4 top-[140px] z-10 flex w-[min(252px,calc(100vw-32px))] max-h-[calc(100%-170px)] flex-col animate-in fade-in-0 slide-in-from-top-2 duration-400 delay-75 fill-mode-both min-[520px]:top-[88px] min-[520px]:max-h-[calc(100%-118px)]"
     >
       <button
         type="button"

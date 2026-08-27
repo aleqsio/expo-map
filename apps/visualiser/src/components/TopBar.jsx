@@ -49,11 +49,18 @@ export default function TopBar({ manifest, mode, setMode, hasChanges, overlaid, 
     ? `${manifest.pr ? `PR #${manifest.pr.number} · ` : ''}${manifest.pr?.title ?? `${(manifest.base?.commit ?? 'base').slice(0, 7)} → ${(manifest.head?.commit ?? 'head').slice(0, 7)}`}${overlaid ? '' : ' · no map backdrop'}`
     : `${manifest.app.mode ?? 'map'} · ${manifest.app.device ?? 'unknown device'} · ${new Date(manifest.generatedAt).toLocaleDateString()}`
 
+  // Two width thresholds, both measured rather than guessed. Below 520px the
+  // identity panel and the tool panel no longer share a line — they used to
+  // keep sharing it anyway, printing the wordmark straight through the
+  // Map/Changes toggle at around 310px — so the tools drop to a line of their
+  // own. Below 360px even the stacked panel is tight, and the wordmark gives up
+  // its name; the mark still signs the page. The toggle is the control that has
+  // to survive both, so nothing is ever taken from it.
   return (
-    <header className="pointer-events-none absolute inset-x-4 top-4 z-10 flex items-start justify-between gap-3">
-      <div className="panel pointer-events-auto flex max-w-[min(760px,calc(100vw-120px))] items-center gap-4 px-4 py-2.5 animate-in fade-in-0 slide-in-from-top-2 duration-400">
-        <div className="flex min-w-0 items-center gap-3">
-          <Wordmark />
+    <header className="pointer-events-none absolute inset-x-4 top-4 z-10 flex flex-col items-end gap-2 min-[520px]:flex-row min-[520px]:items-start min-[520px]:justify-between min-[520px]:gap-3">
+      <div className="panel pointer-events-auto flex w-full min-w-0 items-center gap-3 px-3 py-2.5 animate-in fade-in-0 slide-in-from-top-2 duration-400 min-[520px]:w-auto min-[520px]:max-w-[min(760px,calc(100vw-120px))] min-[520px]:gap-4 min-[520px]:px-4">
+        <div className="flex min-w-0 flex-1 items-center gap-2 min-[520px]:flex-initial min-[520px]:gap-3">
+          <Wordmark labelClassName="hidden min-[360px]:inline" />
           <Separator orientation="vertical" className="h-5" />
           <div className="min-w-0 leading-tight">
             <div className="truncate text-[13px] font-semibold">{manifest.app.name}</div>

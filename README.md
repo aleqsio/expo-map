@@ -101,10 +101,47 @@ You need all four of these:
 
    `effort` also sets how far suspect marking follows imports (1, 2 and 3 hops). Anything set explicitly in `.screenmap/config.json` — `agent.scan`, `agent.maxScreens`, `suspects.depth` — overrides the preset.
 
-4. **Optionally commit two files** in the app repo:
+4. **Optionally commit two files** in the app repo.
 
-   - `.screenmap/config.json` for the mechanical knobs (scheme, device, waits, suspect depth, agent budget, sample params). Start from [`action/templates/config.json`](action/templates/config.json).
-   - `.screenmap/SKILL.md` for the app-specific guidance the agent needs: how to log in, which parameters are real, which controls it must never touch, how long things take. Start from [`action/templates/SCREENMAP_SKILL.md`](action/templates/SCREENMAP_SKILL.md).
+   **`.screenmap/config.json`** holds the mechanical knobs. Every key is optional; start from [`action/templates/config.json`](action/templates/config.json).
+
+   ```json
+   {
+     "effort": "balanced",
+     "scheme": "myapp",
+     "device": "iPhone 17 Pro",
+     "params": { "id": "v60" },
+     "suspects": { "depth": 2, "broadCap": 8 },
+     "waits": { "transition": 2500, "network": 6000, "boot": 15000 },
+     "agent": { "enabled": true, "provider": "claude", "scan": "params", "maxScreens": 8 }
+   }
+   ```
+
+   | Key | Default | What it sets |
+   | --- | --- | --- |
+   | `effort` | `balanced` | The preset from step 3. The `effort` input and `SCREENMAP_EFFORT` set the same thing |
+   | `scheme` | from the parsed app config | URL scheme the deep links use |
+   | `device` | `iPhone 16 Pro` | Simulator to boot. In the Action, the `simulator` input boots the device |
+   | `appName` | the project directory name | Name recorded in the bundle |
+   | `bundleId` | read from the `.app` | Override when discovery picks the wrong one |
+   | `appPath` | discovered under `ios/build` | A prebuilt simulator `.app`. The `app_path` input wins over it |
+   | `metroPort` | `8081` | Port Metro starts on |
+   | `params` | `{}` | Real values for route parameters, see below |
+   | `suspects.depth` | from `effort` | Import hops followed out from a changed file |
+   | `suspects.broadCap` | `8` | Cap on screens marked by a change to a widely imported file |
+   | `waits` | `2500` / `6000` / `15000` ms | `transition`, `network` and `boot` settle times |
+   | `agent.enabled` | `true` | Set `false` for a deterministic-only run |
+   | `agent.provider` | `claude` | A preset CLI, or `agent.command` plus `agent.keyEnv` for any other |
+   | `agent.scan` | from `effort` | `unflowed`, `params` or `all` |
+   | `agent.maxScreens` | from `effort` | Screen budget for one run |
+   | `flowsDir` | `.screenmap/flows` | Where committed flows live |
+   | `skillFile` | `.screenmap/SKILL.md` | Where the project guidance lives |
+
+   `effort` only fills in `agent.scan`, `agent.maxScreens` and `suspects.depth`, so any of the three set here wins over the preset.
+
+   **`params` supplies real values for route parameters.** Without it a route takes a made-up one, so `/brew/[id]` opens as `/brew/1`, and if `1` is not a real id the not-found screen is captured and reported as that screen. `"id": "v60"` covers every route with an `id`, and prefixing the route id scopes it to one route: `"brew/[id].id"` under expo-router, `"Profile.name"` for a react-navigation route map. With an agent key, `balanced` and `thorough` also send those routes back to the agent to find values that work.
+
+   **`.screenmap/SKILL.md`** is the app-specific guidance: how to log in, which ids are real, which controls to leave alone, how long screens take to settle. The agent reads it before it explores. Start from [`action/templates/SCREENMAP_SKILL.md`](action/templates/SCREENMAP_SKILL.md).
 
 5. **Run the baseline workflow once** through `workflow_dispatch`, so pull requests have something to diff against. It publishes `main/<sha>.scrmap` and `main/latest.scrmap` to an orphan `screenmaps` branch.
 
