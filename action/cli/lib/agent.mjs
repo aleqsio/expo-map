@@ -8,7 +8,7 @@
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { ensureDir, log, readJson } from './util.mjs'
+import { PROVIDER_KEY_ENVS, ensureDir, log, readJson } from './util.mjs'
 
 export const SKILL_DIR = path.resolve(new URL('../../../plugins/screenmap/skills/screenmap', import.meta.url).pathname)
 
@@ -17,7 +17,7 @@ export const SKILL_DIR = path.resolve(new URL('../../../plugins/screenmap/skills
 // npm package the Action installs on demand.
 export const PROVIDERS = {
   claude: {
-    bin: 'claude', pkg: '@anthropic-ai/claude-code', keyEnv: 'ANTHROPIC_API_KEY',
+    bin: 'claude', pkg: '@anthropic-ai/claude-code', keyEnv: PROVIDER_KEY_ENVS.claude,
     args: ({ prompt, model, projectDir }) => {
       const a = ['-p', prompt, '--dangerously-skip-permissions', '--output-format', 'text', '--add-dir', projectDir, '--add-dir', SKILL_DIR]
       if (model) a.push('--model', model)
@@ -25,7 +25,7 @@ export const PROVIDERS = {
     },
   },
   codex: {
-    bin: 'codex', pkg: '@openai/codex', keyEnv: 'OPENAI_API_KEY',
+    bin: 'codex', pkg: '@openai/codex', keyEnv: PROVIDER_KEY_ENVS.codex,
     args: ({ prompt, model }) => {
       const a = ['exec', '--dangerously-bypass-approvals-and-sandbox', '--skip-git-repo-check']
       if (model) a.push('-m', model)
@@ -34,7 +34,7 @@ export const PROVIDERS = {
     },
   },
   gemini: {
-    bin: 'gemini', pkg: '@google/gemini-cli', keyEnv: 'GEMINI_API_KEY',
+    bin: 'gemini', pkg: '@google/gemini-cli', keyEnv: PROVIDER_KEY_ENVS.gemini,
     args: ({ prompt, model }) => {
       const a = ['--yolo', '-p', prompt]
       if (model) a.unshift('-m', model)
@@ -42,7 +42,7 @@ export const PROVIDERS = {
     },
   },
   opencode: {
-    bin: 'opencode', pkg: 'opencode-ai', keyEnv: null, // auth is per configured provider — bring your own env
+    bin: 'opencode', pkg: 'opencode-ai', keyEnv: PROVIDER_KEY_ENVS.opencode, // auth is per configured provider — bring your own env
     args: ({ prompt, model }) => {
       const a = ['run']
       if (model) a.push('--model', model)
@@ -89,7 +89,7 @@ export function agentInfo(config) {
 export function runAgent({ projectDir, config, screens, scheme, udid, bundleId, outScreensDir, outFlowsDir, notesPath, summaryPath, mode, prContext }) {
   const info = agentInfo(config)
   if (!screens.length) return { ran: false, reason: 'nothing to explore', ...info }
-  if (!config.agent.enabled) return { ran: false, reason: 'agent disabled in .screenmap/config.json', ...info }
+  if (!config.agent.enabled) return { ran: false, reason: config.effort === 'deterministic' ? 'effort=deterministic — flows replay, nothing is re-checked' : 'agent disabled in .screenmap/config.json', ...info }
   const provider = resolveProvider(config)
   if (provider.error) return { ran: false, reason: provider.error, ...info }
   const env = providerEnv(provider)

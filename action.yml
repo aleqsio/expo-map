@@ -22,19 +22,24 @@ inputs:
     description: "Agent CLI for screens with no committed flow: claude (default) | codex | gemini | opencode. Or set agent.command in .screenmap/config.json to run any CLI."
     default: ""
   agent_api_key:
-    description: API key for the chosen agent provider (mapped to the env var it expects). Leave empty for deterministic-only runs.
+    description: >-
+      API key for the chosen agent provider (mapped to the env var it expects). Optional: leave it
+      empty and effort falls back to "deterministic", which replays committed flows and deep-links
+      the rest without spending a token.
     default: ""
   effort:
     description: >-
       How hard to work, trading tokens and wall-clock against accuracy:
-      fast (deterministic lane only — cheapest, but a screen that starts needing a param
-      quietly captures its own not-found state), balanced (default — also re-checks routes
-      whose deep link is a guess, which is where silent bad captures come from), or
-      thorough (every screen goes through the agent). Overridden by anything set explicitly
-      in .screenmap/config.json.
-    default: balanced
+      deterministic (no agent and no tokens — committed flows replay, everything else is
+      deep-linked unchecked), fast (the agent sees the screens no committed flow can reach —
+      cheapest agent lane, but a screen that starts needing a param quietly captures its own
+      not-found state), balanced (also re-checks routes whose deep link is a guess, which is
+      where silent bad captures come from), or thorough (every screen goes through the agent).
+      Defaults to balanced, or to deterministic when no agent key is set. Overridden by
+      anything set explicitly in .screenmap/config.json.
+    default: ""
   agent_max_screens:
-    description: Cap on screens the agent may explore per run. Empty uses the effort preset's cap (fast 6, balanced 8, thorough 24).
+    description: Cap on screens the agent may explore per run. Empty uses the effort preset's cap (fast 6, balanced 8, thorough 24; deterministic runs no agent at all).
     default: ""
   auto_baseline:
     description: >-

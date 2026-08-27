@@ -38,18 +38,40 @@ export function parseArgs(argv) {
 // `scan` x `depth` x `maxScreens` to get a sensible run. Each preset only
 // supplies defaults: anything set explicitly in config.json still wins.
 //
-//   fast      deterministic lane only. The agent sees just the screens no
-//             committed flow can reach, and suspects stop one import hop out.
-//             Cheapest and quickest; a screen that starts needing a param will
-//             quietly capture its own not-found state.
+//   deterministic  no agent, no tokens: committed flows replay and everything
+//             else is deep-linked. Chosen automatically when no agent key is
+//             set, so a keyless run is a mode rather than a degraded one.
+//   fast      the agent sees just the screens no committed flow can reach, and
+//             suspects stop one import hop out. Cheapest agent lane; a screen
+//             that starts needing a param quietly captures its own not-found.
 //   balanced  (default) also re-checks routes whose deep link is a guess built
 //             from config.params, which is where silent bad captures come from.
 //   thorough  every screen in the run goes through the agent, suspects reach
 //             three hops. Most accurate, most tokens, slowest.
 export const EFFORTS = {
+  deterministic: { agent: { enabled: false, scan: 'unflowed', maxScreens: 0 }, suspects: { depth: 2 } },
   fast: { agent: { scan: 'unflowed', maxScreens: 6 }, suspects: { depth: 1 } },
   balanced: { agent: { scan: 'params', maxScreens: 8 }, suspects: { depth: 2 } },
   thorough: { agent: { scan: 'all', maxScreens: 24 }, suspects: { depth: 3 } },
+}
+
+// The env var each provider reads. Lives here rather than in agent.mjs so
+// effort resolution can tell whether a key exists without importing the agent
+// lane; PROVIDERS builds its keyEnv from this. opencode authenticates through
+// whichever provider it was configured for, so there is nothing to look for.
+export const PROVIDER_KEY_ENVS = {
+  claude: 'ANTHROPIC_API_KEY', codex: 'OPENAI_API_KEY', gemini: 'GEMINI_API_KEY', opencode: null,
+}
+
+// Is there a key for the provider this run would use? A custom agent.command
+// brings its own auth, and opencode has no fixed variable, so both count as
+// available and the user stays in charge of the effort they asked for.
+function agentKeyPresent(user) {
+  if (user.agent?.command) return true
+  const name = process.env.AGENT_PROVIDER || user.agent?.provider || 'claude'
+  const keyEnv = user.agent?.keyEnv ?? PROVIDER_KEY_ENVS[name]
+  if (keyEnv === null || keyEnv === undefined) return true
+  return !!(process.env[keyEnv] || process.env.AGENT_API_KEY)
 }
 
 export function loadConfig(projectDir) {
@@ -62,7 +84,10 @@ export function loadConfig(projectDir) {
     params: {},
   }
   const user = readJson(path.join(projectDir, '.screenmap', 'config.json'), {})
-  const effort = process.env.SCREENMAP_EFFORT || user.effort || 'balanced'
+  // An explicit effort is always honoured, even one that cannot run: asking for
+  // balanced with no key should still say the agent sat out. Only the unstated
+  // case falls back to the mode a keyless runner can actually deliver.
+  const effort = process.env.SCREENMAP_EFFORT || user.effort || (agentKeyPresent(user) ? 'balanced' : 'deterministic')
   const preset = EFFORTS[effort]
   if (!preset) throw new Error(`unknown effort "${effort}" — expected ${Object.keys(EFFORTS).join(' | ')}`)
   const defaults = {
