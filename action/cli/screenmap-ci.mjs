@@ -106,7 +106,7 @@ async function captureRoutes({ project, config, scheme, session, routes, flows, 
             : null,
         })
         if (v.ok === false) {
-          log(`deep link for ${r.id} looks wrong (${v.method} ${v.score}) — queued for the agent`)
+          log(`deep link for ${r.id} could not be verified (${v.method} ${v.score}) — queued for the agent`)
           result.unverified.push({ route: r.id, method: v.method, score: v.score })
           // regardless of whether a flow exists: a committed flow that could not
           // replay left us here, and its capture is no more trustworthy
@@ -494,8 +494,13 @@ function renderComment(s, { mapUrl, changesUrl, artifactUrl, shotUrl, shotsBase,
     // a capture OCR could not vouch for is worth saying out loud: it is the
     // difference between "this is the screen" and "this is what the deep link
     // rendered"
+    // Careful what this claims. The bogus-param probe only proves the route
+    // renders the same thing for a real value and a nonsense one, which happens
+    // both when the param failed to resolve AND when the screen quietly falls
+    // back to a default. Saying "not-found" is wrong in the second case, and
+    // the second case is common.
     s.unverified?.length
-      ? `${s.unverified.length} deep link${s.unverified.length === 1 ? '' : 's'} did not appear to arrive (${s.unverified.map((u) => `\`${route(u.route)}\``).join(', ')}) — the capture may be a not-found screen.`
+      ? `${s.unverified.length} capture${s.unverified.length === 1 ? '' : 's'} could not be verified (${s.unverified.map((u) => `\`${route(u.route)}\``).join(', ')}): the route renders the same screen for a real parameter and a nonsense one, so this may not be the screen you expect. Set a real value in \`params\`, or record a flow with landmarks.`
       : null,
     artifactUrl ? `[Download the bundle](${artifactUrl}).` : null,
   ].filter(Boolean)

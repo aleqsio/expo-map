@@ -43,11 +43,41 @@ items are done. What is left:
    re-record everything that accumulated, with deterministic PR runs in between.
    Today `drifted` lives only in one run's `summary.json`.
 
+## The bogus-param probe cannot see through a fallback
+
+Found by running fifteen PRs against screenmap-test on 2026-08-28.
+
+`verifyDeepLink()`'s bogus-param reference proves only that a route renders the
+same screen for a real value and an impossible one. That happens in two very
+different situations:
+
+- the parameter did not resolve, and both render not-found; or
+- the screen quietly falls back to a default.
+
+screenmap-test's own timer is the second kind — `brew/[id].tsx` has
+`methodById(id) ?? METHODS[0]` — so the probe fires whether `params` is correct
+(PR #11) or deliberately broken (PR #3). Both captures are a valid V60 timer.
+No false negatives, but no discrimination either, and the warning had to stop
+claiming "not-found".
+
+Worth doing, in order:
+
+1. Compare the capture against the baseline capture of the same route. A screen
+   whose parameter broke this PR looks different from the same screen last time;
+   a fallback looks identical. This distinguishes the two cases with data we
+   already have, and costs nothing.
+2. Treat a route whose bogus probe matches as *unparameterised in practice* and
+   say so once, rather than warning about it on every PR forever.
+3. Landmarks remain the only strong signal. The surest fix for a repo is a
+   committed flow with a `landmarks` sidecar, which the docs should say plainly.
+
 ## Decide `suspects.broadCap`
 
 Now that tsconfig aliases resolve, a change to a shared data file marks every
-screen that imports it. On screenmap-test, editing `src/data/methods.ts`
-correctly marks 9 of 9 screens. `broadCap` (default 8) is the only thing between
+screen that imports it. Measured on screenmap-test PR #5: a one-word change in
+`src/data/methods.ts` marked 8 screens, the whole app bar the one that does not
+import it, and `broadFiles` stayed empty because seven importers sit under the
+cap of eight. `broadCap` (default 8) is the only thing between
 a data-file edit and re-capturing the whole app on every PR.
 
 Either the cap is right and the default is too high, or the honest answer is a
