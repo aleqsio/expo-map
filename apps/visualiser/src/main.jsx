@@ -14,7 +14,19 @@ createRoot(document.getElementById('root')).render(
       <TooltipProvider delayDuration={300}>
         <App />
         <Toaster position="top-center" richColors closeButton={false} />
-        <Analytics />
+        {/* The Action screenshots this page with real headless Chrome on every
+            PR run, in every repo that uses it, and a real browser executes this
+            script — so unlike crawlers it does not filter itself out. Those
+            visits always carry ?shot=, which nothing else sets. */}
+        <Analytics
+          beforeSend={(event) => {
+            try {
+              return new URL(event.url).searchParams.has('shot') ? null : event
+            } catch {
+              return event
+            }
+          }}
+        />
       </TooltipProvider>
     </ThemeProvider>
   </StrictMode>
