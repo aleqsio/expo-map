@@ -43,6 +43,28 @@ items are done. What is left:
    re-record everything that accumulated, with deterministic PR runs in between.
    Today `drifted` lives only in one run's `summary.json`.
 
+## Auto-baseline needs the guards the first live test found
+
+Found by T15 on 2026-08-28, on the run that proved the feature works.
+
+Two hazards, both fixed, both worth remembering because both burn macOS minutes
+at ten times the Linux rate before anyone notices:
+
+1. **The re-run signal was the run log.** GitHub echoes every composite step's
+   script source into the log, so grepping it for `no baseline map found` matched
+   the echoed source on every PR run in the repo, not the runs that actually hit
+   that branch. A completed baseline would have re-run all fifteen open PRs. It
+   now reads the PR's own sticky comment instead, which only says "no baseline
+   map yet" or "building the first map" when it really happened.
+2. **Nothing broke the cycle.** If a baseline completes and the PR still finds no
+   map, the PR dispatches another baseline, which re-runs the PR, forever. A
+   dispatch is now suppressed when a baseline succeeded in the last 90 minutes,
+   and the run says why.
+
+Neither is exercised by a repo that works. The first shows up the moment a repo
+has more than one open PR; the second whenever a baseline cannot produce what
+the PR is looking for.
+
 ## The bogus-param probe cannot see through a fallback
 
 Found by running fifteen PRs against screenmap-test on 2026-08-28.

@@ -221,7 +221,23 @@ runs:
                           --status in_progress --json databaseId -q 'length' 2>/dev/null || echo 0)
               queued=$(gh run list --repo "${{ github.repository }}" --workflow "$wf" \
                           --status queued --json databaseId -q 'length' 2>/dev/null || echo 0)
-              if [ "$running" = "0" ] && [ "$queued" = "0" ]; then
+              # A baseline that already finished and still left us without a map
+              # means dispatching again would just repeat: PR re-runs, finds
+              # nothing, dispatches, baseline finishes, PR re-runs. Bail out and
+              # say so rather than spending macOS minutes in a circle.
+              recent=$(gh run list --repo "${{ github.repository }}" --workflow "$wf" \
+                         --status success --limit 1 --json updatedAt \
+                         -q '.[0].updatedAt // ""' 2>/dev/null || echo "")
+              settled=0
+              if [ -n "$recent" ]; then
+                r_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$recent" +%s 2>/dev/null || echo 0)
+                now=$(date +%s)
+                [ "$r_epoch" -gt 0 ] && [ $((now - r_epoch)) -lt 5400 ] && settled=1
+              fi
+              if [ "$settled" = "1" ]; then
+                echo "::warning::a baseline completed recently but no map was found on $branch — not dispatching again"
+                started=""
+              elif [ "$running" = "0" ] && [ "$queued" = "0" ]; then
                 if gh workflow run "$wf" --repo "${{ github.repository }}" --ref "$branch" 2>/dev/null; then
                   started="yes"; echo "dispatched $wf on $branch"
                 else
@@ -343,6 +359,14 @@ runs:
     # is waiting on this job, so re-run it rather than making someone push an
     # empty commit. Only PRs whose latest screenmap run produced no bundle are
     # touched, so ordinary PRs are left alone.
+    # The other half of auto_baseline: a PR that stopped for a missing baseline
+    # is waiting on this job, so re-run it rather than making someone push an
+    # empty commit.
+    #
+    # The signal is the PR's own sticky comment, not the run log. GitHub echoes
+    # every composite step's script source into the log, so grepping it for
+    # "no baseline map found" matches the echoed source on every run and would
+    # re-run every open PR in the repo.
     - name: Re-run PRs that were waiting for this baseline
       if: inputs.mode == 'baseline' && steps.run.outputs.bundle != ''
       shell: bash
@@ -351,20 +375,20 @@ runs:
       run: |
         repo="${{ github.repository }}"
         for pr in $(gh pr list --repo "$repo" --state open --json number -q '.[].number' 2>/dev/null); do
+          body=$(gh api "repos/$repo/issues/$pr/comments" -q '.[] | select(.body | contains("<!-- screenmap-ci -->")) | .body' 2>/dev/null | tail -1)
+          case "$body" in
+            *"no baseline map yet"*|*"building the first map"*) ;;
+            *) continue ;;
+          esac
           branch=$(gh pr view "$pr" --repo "$repo" --json headRefName -q .headRefName 2>/dev/null || true)
           [ -n "$branch" ] || continue
           run=$(gh run list --repo "$repo" --branch "$branch" --event pull_request --limit 20 \
                   --json databaseId,workflowName \
                   -q "[.[] | select(.workflowName | test(\"screenmap\"; \"i\"))] | .[0].databaseId" 2>/dev/null || true)
           [ -n "$run" ] && [ "$run" != "null" ] || continue
-          # only the ones that bailed out with no bundle, i.e. were waiting on us
-          if gh run view "$run" --repo "$repo" --log 2>/dev/null | grep -q "no baseline map found\|dispatched .*baseline\|is already running"; then
-            gh run rerun "$run" --repo "$repo" 2>/dev/null && echo "re-ran PR #$pr ($run)" || echo "could not re-run PR #$pr"
-          fi
+          gh run rerun "$run" --repo "$repo" 2>/dev/null && echo "re-ran PR #$pr ($run)" || echo "could not re-run PR #$pr"
         done
 
-    # Without this a crashed run leaves "mapping the screens…" on the PR
-    # forever, which is worse than saying nothing.
     - name: Replace the pending comment if the run failed
       if: failure() && inputs.mode == 'pr' && github.event.pull_request.number
       shell: bash
