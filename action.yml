@@ -168,7 +168,10 @@ runs:
         base_sha="${{ github.event.pull_request.base.sha }}"
         branch="${{ inputs.screenmaps_branch }}"
         if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-          git fetch --depth 1 origin "$branch":refs/remotes/origin/"$branch"
+          # --force: this is a remote-tracking ref, and the screenmaps branch is
+          # advanced by every concurrent PR run. Without it a run that started
+          # before another run published dies here on a non-fast-forward.
+          git fetch --depth 1 --force origin "$branch":refs/remotes/origin/"$branch"
           pick=""
           [ -n "$base_sha" ] && pick=$(git ls-tree --name-only -r origin/$branch | grep "^main/${base_sha:0:7}" | head -1 || true)
           [ -z "$pick" ] && pick=$(git ls-tree --name-only -r origin/$branch | grep '^main/latest.scrmap$' | head -1 || true)

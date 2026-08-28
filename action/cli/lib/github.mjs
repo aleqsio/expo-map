@@ -30,12 +30,28 @@ export function upsertStickyComment({ repo, number, body }) {
 // Commit files into an orphan branch via a throwaway worktree. Returns the
 // new commit sha and SHA-pinned raw URLs (raw.githubusercontent caches ~5min
 // and jsDelivr ~12h on branch refs — pin to the commit).
-export function publishToBranch({ repo, branch = 'screenmaps', files, message, cwd = process.cwd() }) {
+// Every PR run in a repo publishes to the same orphan branch, so two runs
+// finishing together race: the second one's push is rejected non-fast-forward.
+// There is no real conflict — each run writes its own pr-N/<sha>/ paths — so
+// rebuild on whatever the branch has become and push again.
+export function publishToBranch({ repo, branch = 'screenmaps', files, message, cwd = process.cwd(), attempts = 4 }) {
+  for (let attempt = 1; ; attempt++) {
+    try { return publishOnce({ repo, branch, files, message, cwd }) } catch (e) {
+      const raced = /non-fast-forward|fetch first|rejected|cannot lock ref|failed to push/i.test(String(e.message))
+      if (!raced || attempt >= attempts) throw e
+      // the failed attempt left its worktree registered
+      spawnSync('git', ['worktree', 'prune'], { cwd, encoding: 'utf8' })
+      log(`publish to ${branch} lost a race (attempt ${attempt}/${attempts}) — rebuilding on the new tip`)
+    }
+  }
+}
+
+function publishOnce({ repo, branch, files, message, cwd }) {
   const wt = fs.mkdtempSync(path.join(os.tmpdir(), 'screenmaps-'))
   const git = (args, o = {}) => sh('git', args, { cwd, ...o })
   const exists = spawnSync('git', ['ls-remote', '--exit-code', '--heads', 'origin', branch], { cwd, encoding: 'utf8' }).status === 0
   if (exists) {
-    git(['fetch', '--depth', '1', 'origin', branch])
+    git(['fetch', '--depth', '1', '--force', 'origin', `+${branch}:refs/remotes/origin/${branch}`])
     git(['worktree', 'add', wt, `origin/${branch}`])
     sh('git', ['checkout', '-B', branch], { cwd: wt })
   } else {
