@@ -4,6 +4,7 @@ import { Check, ChevronDown } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { visualDiff } from '../lib/visualDiff'
 import { cn } from '@/lib/utils'
+import { nodeLabel } from '../lib/label.js'
 
 const BROKEN = {
   'error-boundary': { icon: '⛌', label: 'crashes on deep link' },
@@ -127,7 +128,7 @@ export default function ScreenNode({ data, selected }) {
         onMouseLeave={canSwap ? () => setHovered(false) : undefined}
       >
         {displayed ? (
-          <img src={displayed} alt={node.urlPath} draggable={false} />
+          <img src={displayed} alt={nodeLabel(node)} draggable={false} />
         ) : (
           <div className="no-shot"><span>{node.capture.status === 'missing' ? 'no capture' : node.capture.status}</span></div>
         )}
@@ -163,7 +164,7 @@ export default function ScreenNode({ data, selected }) {
       </div>
       <div className="node-label">
         <span className="dot" />
-        <span className="path" title={node.file ?? ''}>{node.urlPath}</span>
+        <span className="path" title={node.file ?? ''}>{nodeLabel(node)}</span>
       </div>
       {states.length === 0 ? null : statePickable ? (
         <StatePicker states={states} active={activeState} baseDiffStatus={baseDiffStatus} onSelect={onStateSelect} />

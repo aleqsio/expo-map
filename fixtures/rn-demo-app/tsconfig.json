@@ -1,0 +1,7 @@
+{
+  // JSONC on purpose: the alias stripper has to survive this
+  "compilerOptions": {
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["**/*.ts", "**/*.tsx"]
+}

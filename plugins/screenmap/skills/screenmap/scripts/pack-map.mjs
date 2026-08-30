@@ -46,7 +46,7 @@ const shotFiles = fs.existsSync(shotsDir)
   ? fs.readdirSync(shotsDir).filter((f) => /\.(png|jpe?g|webp)$/i.test(f))
   : []
 
-const appName = path.basename(graph.projectRoot ?? projectRoot)
+const appName = graph.appName ?? path.basename(graph.projectRoot ?? projectRoot)
 
 const nodes = graph.routes.map((r) => {
   const cs = captureStatus[r.id] ?? {}
@@ -57,7 +57,9 @@ const nodes = graph.routes.map((r) => {
     .sort((a, b) => a.name.localeCompare(b.name))
   return {
     id: r.id,
-    urlPath: r.urlPath,
+    urlPath: r.urlPath ?? null,
+    title: r.title ?? r.urlPath ?? r.id,
+    reach: r.reach ?? (r.urlPath ? 'deep-link' : 'navigation-only'),
     file: r.file ?? null,
     slug: r.slug,
     group: r.layoutDir ?? '',
@@ -68,7 +70,7 @@ const nodes = graph.routes.map((r) => {
     capture: {
       status: cs.status ?? (baseShot ? 'ok' : 'missing'),
       note: cs.note ?? null,
-      needsNavigation: cs.needsNavigation ?? false,
+      needsNavigation: cs.needsNavigation ?? r.reach === 'navigation-only',
       screenshot: baseShot ? 'screens/' + baseShot : null,
       states,
     },

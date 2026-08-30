@@ -1,6 +1,5 @@
 {
-  "generatedAt": "2026-08-03T15:55:29.685Z",
-  "projectRoot": "/Users/aleqsio/Projects/expo-map/fixtures/demo-app",
+  "appName": "Demo App",
   "scheme": "demoapp",
   "deepLinkTemplates": {
     "devBuild": "demoapp://<urlPath minus leading slash>",
@@ -25,6 +24,8 @@
       "id": "(tabs)/home",
       "file": "app/(tabs)/home.tsx",
       "urlPath": "/home",
+      "title": "/home",
+      "reach": "deep-link",
       "slug": "tabs_home",
       "params": [],
       "navigator": "Tabs",
@@ -40,6 +41,8 @@
       "id": "(tabs)/settings",
       "file": "app/(tabs)/settings.tsx",
       "urlPath": "/settings",
+      "title": "/settings",
+      "reach": "deep-link",
       "slug": "tabs_settings",
       "params": [],
       "navigator": "Tabs",
@@ -51,6 +54,8 @@
       "id": "+not-found",
       "file": "app/+not-found.tsx",
       "urlPath": "/+not-found",
+      "title": "/+not-found",
+      "reach": "deep-link",
       "slug": "+not-found",
       "params": [],
       "navigator": "Stack",
@@ -62,6 +67,8 @@
       "id": "about",
       "file": "app/about.tsx",
       "urlPath": "/about",
+      "title": "/about",
+      "reach": "deep-link",
       "slug": "about",
       "params": [],
       "navigator": "Stack",
@@ -73,6 +80,8 @@
       "id": "details/[id]",
       "file": "app/details/[id].tsx",
       "urlPath": "/details/[id]",
+      "title": "/details/[id]",
+      "reach": "deep-link",
       "slug": "details_id",
       "params": [
         "id"
@@ -96,6 +105,8 @@
       "id": "index",
       "file": "app/index.tsx",
       "urlPath": "/",
+      "title": "/",
+      "reach": "deep-link",
       "slug": "index",
       "params": [],
       "navigator": "Stack",
@@ -107,6 +118,8 @@
       "id": "modal",
       "file": "app/modal.tsx",
       "urlPath": "/modal",
+      "title": "/modal",
+      "reach": "deep-link",
       "slug": "modal",
       "params": [],
       "navigator": "Stack",
@@ -189,6 +202,8 @@
     "edges": 10,
     "unresolvedEdges": 0,
     "routesWithStateHints": 3,
-    "routesNeedingParams": 1
+    "routesNeedingParams": 1,
+    "navigationOnlyRoutes": 0,
+    "orphanRoutes": 0
   }
 }

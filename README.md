@@ -332,6 +332,7 @@ The expensive part is step 2, and you only pay it once. Recorded flows get commi
 
 - `plugins/screenmap/skills/screenmap/SKILL.md` is the agent orchestration: phases, safety rails, and the flow-recording contract.
 - `plugins/screenmap/skills/screenmap/scripts/` holds `parse-routes.mjs`, `pack-map.mjs`, `diff-map.mjs` (PR diff: suspects and pack) and `render-map.mjs` (static HTML fallback). All plain Node, no dependencies.
+- `plugins/screenmap/skills/screenmap/scripts/routes/` is the route-provider layer: `parse-routes.mjs` only drives it, and each framework (expo-router, react-navigation, or a command you supply) is one module under `providers/`. See [docs/route-providers.md](docs/route-providers.md) to add one.
 - `apps/visualiser/` is the Map / Changes viewer, built with Vite, React, Tailwind v4, shadcn/ui, React Flow and elkjs, plus pixelmatch and OpenCV.js for the visual diff.
 - `action.yml` is the composite GitHub Action. The metadata sits at the repo root so the repo is publishable to the Marketplace. Its `screenmap-ci` CLI lives in `action/cli`, and the workflow and `.scrmap` templates live in `action/templates`.
 - [`docs/scrmap-format.md`](docs/scrmap-format.md) is the versioned bundle format contract, for writing your own producer.

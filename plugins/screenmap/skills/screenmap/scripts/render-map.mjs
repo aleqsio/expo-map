@@ -30,7 +30,11 @@ shotsDir = path.resolve(shotsDir ?? path.join(baseDir, 'screens'))
 outPath = path.resolve(outPath ?? path.join(baseDir, 'map.html'))
 
 const graph = JSON.parse(fs.readFileSync(graphPath, 'utf8'))
-const appName = path.basename(graph.projectRoot)
+const appName = graph.appName ?? path.basename(graph.projectRoot)
+
+// Every node needs a label, and not every framework gives every screen a URL:
+// react-navigation screens missing from the linking config have none at all.
+const label = (r) => r?.title ?? r?.urlPath ?? r?.id ?? '?'
 
 const shotFiles = fs.existsSync(shotsDir)
   ? fs.readdirSync(shotsDir).filter((f) => /\.(png|jpe?g|webp)$/i.test(f))
@@ -102,7 +106,7 @@ const routeById = Object.fromEntries(graph.routes.map((r) => [r.id, r]))
 
 // ---- mermaid overview ----
 const mmNodes = graph.routes
-  .map((r) => `  ${JSON.stringify(r.slug).replace(/"/g, '')}["${r.urlPath}"]`)
+  .map((r) => `  ${JSON.stringify(r.slug).replace(/"/g, '')}["${label(r)}"]`)
   .join('\n')
 const mmEdges = graph.edges
   .filter((e) => e.to && e.from !== e.to)
@@ -128,7 +132,7 @@ function routeCard(r) {
   const { base, states } = shotsFor(r.slug)
   const edges = edgesFrom.get(r.id) ?? []
   const shot = base
-    ? `<img class="shot" src="${imgSrc(base)}" alt="${esc(r.urlPath)}" loading="lazy">`
+    ? `<img class="shot" src="${imgSrc(base)}" alt="${esc(label(r))}" loading="lazy">`
     : `<div class="shot placeholder">no screenshot</div>`
   const stateRow = states.length
     ? `<div class="states">${states
@@ -142,7 +146,7 @@ function routeCard(r) {
     ? `<div class="edges">${edges
         .map((e) =>
           e.to
-            ? `<a class="chip" href="#route-${esc(routeById[e.to].slug)}" title="${esc(e.raw)}">→ ${esc(routeById[e.to].urlPath)}</a>`
+            ? `<a class="chip" href="#route-${esc(routeById[e.to].slug)}" title="${esc(e.raw)}">→ ${esc(label(routeById[e.to]))}</a>`
             : `<span class="chip unresolved" title="${esc(e.raw)}">→ ? ${esc(e.target)}</span>`
         )
         .join('')}</div>`
@@ -162,7 +166,7 @@ function routeCard(r) {
   return `
   <div class="card" id="route-${esc(r.slug)}">
     <div class="card-head">
-      <span class="url">${esc(r.urlPath)}</span>${badges}
+      <span class="url">${esc(label(r))}</span>${badges}
     </div>
     <div class="file">${esc(r.file)}</div>
     ${statusNote}
@@ -209,7 +213,7 @@ function flowsSection() {
   const cards = flows
     .map((f) => {
       const routeRef = f.route && routeById[f.route]
-        ? `<a class="chip" href="#route-${esc(routeById[f.route].slug)}">${esc(routeById[f.route].urlPath)}</a>`
+        ? `<a class="chip" href="#route-${esc(routeById[f.route].slug)}">${esc(label(routeById[f.route]))}</a>`
         : ''
       return `
   <div class="card flow" id="flow-${esc(f.name ?? f._file)}">
@@ -291,11 +295,11 @@ const html = `<!doctype html>
   <div class="summary">${s.routes ?? graph.routes.length} routes · ${s.layouts ?? '?'} layouts · ${s.edges ?? graph.edges.length} links${
     s.unresolvedEdges ? ` (${s.unresolvedEdges} unresolved)` : ''
   } · generated ${esc(graph.generatedAt ?? '')}</div>
-  ${missing.length ? `<div class="warnbox">⚠ ${missing.length} route(s) without a screenshot: ${missing.map((r) => esc(r.urlPath)).join(', ')}</div>` : ''}
+  ${missing.length ? `<div class="warnbox">⚠ ${missing.length} route(s) without a screenshot: ${missing.map((r) => esc(label(r))).join(', ')}</div>` : ''}
   ${(() => {
-    const nn = graph.routes.filter((r) => captureStatus[r.id]?.needsNavigation)
+    const nn = graph.routes.filter((r) => captureStatus[r.id]?.needsNavigation || r.reach === 'navigation-only')
     return nn.length
-      ? `<div class="warnbox">⚠ ${nn.length} route(s) not reachable by bare deep link (need in-app navigation or real data): ${nn.map((r) => `<a href="#route-${esc(r.slug)}">${esc(r.urlPath)}</a>`).join(', ')}</div>`
+      ? `<div class="warnbox">⚠ ${nn.length} route(s) not reachable by bare deep link (need in-app navigation or real data): ${nn.map((r) => `<a href="#route-${esc(r.slug)}">${esc(label(r))}</a>`).join(', ')}</div>`
       : ''
   })()}
   <details>

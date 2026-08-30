@@ -38,7 +38,9 @@ myapp-2026-08-08.scrmap        (zip)
     "scheme": "bluesky",          // deep-link scheme, null if unknown
     "platform": "ios-simulator",
     "device": "iPhone 17 Pro",    // device captures were taken on
-    "mode": "react-navigation"    // or "expo-router" — how routes were discovered
+    "mode": "react-navigation"    // the route provider that discovered the screens:
+                                  //   expo-router | react-navigation | custom | …
+                                  //   (see docs/route-providers.md)
   },
   "generatedAt": "2026-08-06T14:00:00.000Z"
 }
@@ -50,7 +52,11 @@ myapp-2026-08-08.scrmap        (zip)
 {
   "nodes": [{
     "id": "Profile",                    // unique; route id from the producer
-    "urlPath": "/profile/:name",        // deep-link path pattern
+    "title": "Profile",                 // display label — ALWAYS present; use this to
+                                        //   label a node, not urlPath
+    "urlPath": "/profile/:name",        // deep-link path pattern; NULL when the screen
+                                        //   has no URL (normal in react-navigation)
+    "reach": "deep-link",               // "deep-link" | "navigation-only" | "unknown"
     "file": "src/view/screens/Profile.tsx",  // source file, if known
     "slug": "Profile",                  // screenshot base name
     "group": "profile",                 // visual grouping (navigator dir / path segment)
@@ -131,6 +137,15 @@ The **`.meta.json` sidecar** maps YAML step indexes (0-based, sparse) to cartogr
   deep links**; flows with `tap` / `type` / gesture steps are **interactive** —
   both replay via `argent flow run`, no agent needed.
 - **State variants** attach extra captures to a node; `screens/<slug>--<state>.png`.
+- **Labelling**: use `title`. It is always present, while `urlPath` is null for any
+  screen the producer could not give a URL — a react-navigation screen absent from the
+  linking config, for instance. Bundles packed before `title` existed have neither
+  field set on some nodes; fall back `title ?? urlPath ?? id`.
+- **reach** is the producer's static verdict on how a screen can be opened, decided
+  before any capture runs: `navigation-only` means there is no deep link at all, and
+  the capture stage must navigate to it rather than visiting a URL. It seeds
+  `capture.needsNavigation`, which remains the *observed* verdict and can also be set
+  by an agent that found a screen unreachable in practice.
 - **needsNavigation** nodes cannot be reached by bare deep link; their flow or note
   explains the in-app path.
 - Viewers must ignore unknown fields and reject `formatVersion` they don't support.
