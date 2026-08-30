@@ -81,6 +81,9 @@ export function loadConfig(projectDir) {
     suspects: { broadCap: 8 },
     agent: { enabled: true, model: null, provider: null, command: null, keyEnv: null },
     flowsDir: '.screenmap/flows', skillFile: '.screenmap/SKILL.md',
+    // routes.provider pins the route provider when detection is ambiguous or
+    // wrong; "custom" runs routes.command instead. See docs/route-providers.md.
+    routes: { provider: 'auto', command: null },
     params: {},
   }
   const user = readJson(path.join(projectDir, '.screenmap', 'config.json'), {})
@@ -100,6 +103,7 @@ export function loadConfig(projectDir) {
     waits: { ...defaults.waits, ...(user.waits ?? {}) },
     suspects: { ...defaults.suspects, ...(user.suspects ?? {}) },
     agent: { ...defaults.agent, ...(user.agent ?? {}) },
+    routes: { ...defaults.routes, ...(user.routes ?? {}) },
   }
   if (process.env.AGENT_MAX_SCREENS) merged.agent.maxScreens = Number(process.env.AGENT_MAX_SCREENS) || merged.agent.maxScreens
   if (process.env.SCREENMAP_APP_PATH) merged.appPath = process.env.SCREENMAP_APP_PATH // a prebuilt client (e.g. from EAS) beats ios/build discovery
@@ -107,8 +111,12 @@ export function loadConfig(projectDir) {
 }
 
 // substitute :param placeholders in a urlPath with sample values
+// null when the route has no URL at all. Navigator-driven frameworks register
+// plenty of screens outside their linking config; falling back to the app root
+// would capture the home screen and file it under this route's name.
 export function deepLinkFor(scheme, route, params = {}) {
-  let p = route.urlPath ?? '/'
+  if (!route.urlPath) return null
+  let p = route.urlPath
   for (const name of route.params ?? []) {
     const v = params[`${route.id}.${name}`] ?? params[name] ?? '1'
     p = p.replace(new RegExp(`:${name}\\??`, 'g'), encodeURIComponent(String(v))).replace(new RegExp(`\\[${name}\\]`, 'g'), encodeURIComponent(String(v)))

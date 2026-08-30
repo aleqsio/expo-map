@@ -1,0 +1,147 @@
+{
+  "appName": "RN Demo",
+  "scheme": "rndemo",
+  "deepLinkTemplates": {
+    "devBuild": "rndemo://<urlPath minus leading slash>",
+    "expoGo": "exp://127.0.0.1:8081/--<urlPath>"
+  },
+  "mode": "react-navigation",
+  "linkingFile": "src/navigation/linking.ts",
+  "screensResolved": 5,
+  "layouts": [
+    {
+      "file": "src/navigation/RootNavigator.tsx",
+      "dir": "Tabs",
+      "navigator": "Tabs"
+    },
+    {
+      "file": "src/navigation/RootNavigator.tsx",
+      "dir": "Stack",
+      "navigator": "Stack"
+    }
+  ],
+  "routes": [
+    {
+      "id": "Feed",
+      "file": "src/screens/FeedScreen.tsx",
+      "urlPath": "/feed",
+      "title": "Feed",
+      "reach": "deep-link",
+      "slug": "Feed",
+      "params": [],
+      "navigator": "Tabs",
+      "layoutDir": "Tabs",
+      "presentation": null,
+      "stateHints": []
+    },
+    {
+      "id": "Search",
+      "file": "src/screens/SearchScreen.tsx",
+      "urlPath": "/search",
+      "title": "Search",
+      "reach": "deep-link",
+      "slug": "Search",
+      "params": [],
+      "navigator": "Tabs",
+      "layoutDir": "Tabs",
+      "presentation": null,
+      "stateHints": []
+    },
+    {
+      "id": "Profile",
+      "file": "src/screens/ProfileScreen.tsx",
+      "urlPath": "/profile/:userId",
+      "title": "Profile",
+      "reach": "deep-link",
+      "slug": "Profile",
+      "params": [
+        "userId"
+      ],
+      "navigator": "Stack",
+      "layoutDir": "Stack",
+      "presentation": null,
+      "stateHints": [
+        {
+          "type": "bottom-sheet",
+          "lib": "gorhom-bottom-sheet",
+          "snapPoints": [
+            "25%",
+            "60%"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Settings",
+      "file": "src/screens/SettingsScreen.tsx",
+      "urlPath": "/settings",
+      "title": "Settings",
+      "reach": "deep-link",
+      "slug": "Settings",
+      "params": [],
+      "navigator": "Stack",
+      "layoutDir": "Stack",
+      "presentation": "modal",
+      "stateHints": [
+        {
+          "type": "router-modal",
+          "presentation": "modal"
+        }
+      ]
+    },
+    {
+      "id": "Onboarding",
+      "file": "src/screens/OnboardingScreen.tsx",
+      "urlPath": null,
+      "title": "Onboarding",
+      "reach": "navigation-only",
+      "slug": "Onboarding",
+      "params": [],
+      "navigator": "Stack",
+      "layoutDir": "Stack",
+      "presentation": null,
+      "stateHints": [
+        {
+          "type": "rn-modal"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "Feed",
+      "to": "Profile",
+      "raw": "navigate('Profile')",
+      "target": "/profile/:userId"
+    },
+    {
+      "from": "Search",
+      "to": "Settings",
+      "raw": "navigate('Settings')",
+      "target": "/settings"
+    },
+    {
+      "from": "Settings",
+      "to": "Onboarding",
+      "raw": "navigate('Onboarding')",
+      "target": "Onboarding"
+    },
+    {
+      "from": "Onboarding",
+      "to": "Feed",
+      "raw": "navigate('Feed')",
+      "target": "/feed"
+    }
+  ],
+  "summary": {
+    "mode": "react-navigation",
+    "routes": 5,
+    "layouts": 2,
+    "edges": 4,
+    "unresolvedEdges": 0,
+    "routesWithStateHints": 3,
+    "routesNeedingParams": 1,
+    "navigationOnlyRoutes": 1,
+    "orphanRoutes": 0
+  }
+}

@@ -1,11 +1,11 @@
 ---
 name: screenmap
-description: Generate a visual navigation map of an Expo app. Statically parses expo-router routes and links for full coverage, then deep-links through every screen in the iOS simulator capturing screenshots — including runtime states like bottom sheet snap points and modals — and renders a self-contained HTML map. Also diffs two revisions into a PR preview (.diff.scrmap) showing which screens/edges were added, removed, or changed. Use when the user asks to map an Expo/React Native app's navigation, screens, or routes, wants a visual sitemap of their app, or wants to preview/review what a PR changes on-screen.
+description: Generate a visual navigation map of an Expo / React Native app. Statically parses routes and links (expo-router, react-navigation, or your own parser) for full coverage, then deep-links through every screen in the iOS simulator capturing screenshots — including runtime states like bottom sheet snap points and modals — and renders a self-contained HTML map. Also diffs two revisions into a PR preview (.diff.scrmap) showing which screens/edges were added, removed, or changed. Use when the user asks to map an Expo/React Native app's navigation, screens, or routes, wants a visual sitemap of their app, or wants to preview/review what a PR changes on-screen.
 ---
 
 # screenmap
 
-Produce a visual map of an Expo app's navigation: every expo-router route as a card with a screenshot, runtime state variants (bottom sheets at each snap point, modals), and navigation edges between screens.
+Produce a visual map of an Expo / React Native app's navigation: every route as a card with a screenshot, runtime state variants (bottom sheets at each snap point, modals), and navigation edges between screens.
 
 **Arguments:** optional path to the Expo project (default: current working directory). `--static` = skip the simulator phases and render a screenshot-less map. `pr <number>` or `diff <base>..<head>` = PR diff mode (see bottom).
 
@@ -48,7 +48,18 @@ Rules:
 node <this skill's dir>/scripts/parse-routes.mjs <project>
 ```
 
-Read the produced `<project>/.screenmap/out/graph.json` and report the summary to the user: route count, layouts (with navigator types), edges (flag unresolved ones), routes with state hints, routes needing params. If the parser finds no `app/` directory, this is not an expo-router project — say so and stop (bare react-navigation apps are not supported yet).
+The parser picks a **route provider** for the project — `expo-router`, `react-navigation`, or a `custom` command — and prints which one it chose and why. See `docs/route-providers.md` for the full contract.
+
+Read the produced `<project>/.screenmap/out/graph.json` and report the summary to the user: the provider (`mode`), route count, layouts (with navigator types), edges (flag unresolved ones), routes with state hints, routes needing params, and **routes with no deep link** (`navigationOnlyRoutes`).
+
+If the parser exits saying no provider recognised the project, or that two fit equally well, do not guess. Show the user the detection table it printed and ask which to use, then re-run with `--provider <id>`:
+
+```bash
+node <this skill's dir>/scripts/parse-routes.mjs <project> --detect          # scores only
+node <this skill's dir>/scripts/parse-routes.mjs <project> --provider react-navigation
+```
+
+A project whose screens are registered somewhere none of the providers read — a generated route table, a home-grown router — is not a dead end: write a small script that emits the graph fragment documented in `docs/route-providers.md` and point `.screenmap/config.json` at it with `{"routes":{"provider":"custom","command":"…"}}`.
 
 If `--static` was requested, jump to Phase 6.
 
@@ -72,7 +83,9 @@ If `--static` was requested, jump to Phase 6.
 
 ## Phase 4 — route sweep
 
-For each route in `graph.json` (substituting params from Phase 2; for `+not-found`, deep-link a garbage path like `/definitely-not-a-route`):
+**Routes with `"reach": "navigation-only"` have no deep link at all** — normal for react-navigation screens that are absent from the linking config. Do not deep-link them and do not visit the app root in their place: that captures the home screen under the wrong route's name, which is exactly the kind of silent bad capture Phase 4b exists to catch. Skip them in this phase, record `{"needsNavigation": true}` for them in `capture-status.json`, and reach them by tapping in Phase 5b — their nav flow is their capture.
+
+For each route with a URL (substituting params from Phase 2; for `+not-found`, deep-link a garbage path like `/definitely-not-a-route`):
 
 1. `open_url` (or `xcrun simctl openurl booted "<url>"`) with the route's deep link.
 2. Wait ~1–1.5s for the transition (MCP `wait`). Content screens that fetch over the network need 3–4s — a capture showing a spinner or loading skeleton means the wait was too short, not that the route is broken; the Phase 4b review catches these, and you re-capture with a longer wait.
@@ -118,7 +131,7 @@ Rules for this phase:
 
 ## Phase 5b — navigation flows (the tap path to every screen)
 
-Deep links are shorthands; the map's primary flow for each screen is the path a human takes. For every reachable route, record `flows/nav-<slug>.yaml` + sidecar (name `nav-<slug>`, title "Navigate to <urlPath>") that reaches it from app launch using real taps:
+Deep links are shorthands; the map's primary flow for each screen is the path a human takes. For every reachable route, record `flows/nav-<slug>.yaml` + sidecar (name `nav-<slug>`, title "Navigate to <title>") that reaches it from app launch using real taps:
 
 - Step 1 is always `open_url` to the app root (`scheme://`) — that's the app entry, not a shortcut. Everything after is taps/swipes.
 - **Every navigating tap records three things**: `coordinate` (device points), `target` (durable label), and `screen` (the route id it landed on). Verify the landing with an MCP screenshot BEFORE writing the step — a wrong `screen` poisons the graph.
@@ -264,5 +277,5 @@ changed-pixels render).
 ## Web fallback (no macOS simulator available, or user asks for web)
 
 - Start `npx expo start --web`, confirm `http://localhost:8081/_sitemap` lists the same routes as the parse (good cross-check).
-- Capture each route with `npx playwright screenshot --viewport-size=390,844 "http://localhost:8081<urlPath>" <project>/.screenmap/out/screens/<slug>.png` (needs `npx playwright install chromium` once; ask before installing).
+- Capture each route that has a `urlPath` with `npx playwright screenshot --viewport-size=390,844 "http://localhost:8081<urlPath>" <project>/.screenmap/out/screens/<slug>.png` (needs `npx playwright install chromium` once; ask before installing).
 - State pass on web: drive the browser pane manually (tap triggers), but note playwright captures are the ones saved to disk — for sheet states, prefer `npx playwright screenshot --full-page` after using its `--wait-for-timeout` or skip and note the limitation.

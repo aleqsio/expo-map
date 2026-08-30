@@ -45,7 +45,7 @@ const copyShots = (fromDir, toDir, slug) => {
 // Capture a list of routes on the live session: committed flow replay first,
 // deep link otherwise, agent for what's left (budgeted). Shared by both jobs.
 async function captureRoutes({ project, config, scheme, session, routes, flows, outDir, work, agentMode, prContext, agentEnabled }) {
-  const result = { replay: [], deeplink: [], agent: [], failed: [], unflowed: [], drifted: [], unverified: [] }
+  const result = { replay: [], deeplink: [], agent: [], failed: [], unflowed: [], drifted: [], unverified: [], navigationOnly: [] }
   const canReplay = flows.size > 0 && argentAvailable()
   if (flows.size > 0 && !canReplay) log('argent not available — committed flows will not be replayed this run')
   for (const r of routes) {
@@ -65,7 +65,7 @@ async function captureRoutes({ project, config, scheme, session, routes, flows, 
         const primary = f.nav ?? f.visit ?? recs[0]
         const v = await verifyLanding({
           shot, rec: primary, udid: session.udid,
-          probe: async () => { try { await session.relaunch(); const p = path.join(work, 'tmp', `${r.slug}.deeplink.png`); await session.visit(deepLinkFor(scheme, r, config.params), p, r.params?.length ? config.waits.network : config.waits.transition); return p } catch { return null } },
+          probe: async () => { const link = deepLinkFor(scheme, r, config.params); if (!link) return null; try { await session.relaunch(); const p = path.join(work, 'tmp', `${r.slug}.deeplink.png`); await session.visit(link, p, r.params?.length ? config.waits.network : config.waits.transition); return p } catch { return null } },
         })
         if (v.ok) { result.replay.push(r.id); done = true; log(`replay ${primary.name} ✓ (${v.method}${v.score != null ? ` ${v.score}` : ''})`) }
         else {
@@ -81,7 +81,13 @@ async function captureRoutes({ project, config, scheme, session, routes, flows, 
         await session.relaunch()
       }
     }
-    if (!done) {
+    if (!done && !deepLinkFor(scheme, r, config.params)) {
+      // No URL means no deep link. Hand it to the agent, which reaches it by
+      // tapping, rather than visiting the app root and filing the home screen
+      // under this route's name.
+      result.navigationOnly.push(r.id)
+      result.unflowed.push({ ...r, reason: (r.reason ? r.reason + '; ' : '') + 'no deep link — reachable only by in-app navigation' })
+    } else if (!done) {
       try {
         const wait = (r.params?.length ? config.waits.network : config.waits.transition)
         const shot = path.join(outDir, `${r.slug}.png`)
@@ -179,7 +185,7 @@ async function baseline() {
   if (!scheme) throw new Error('no deep-link scheme: set scheme in .screenmap/config.json')
   const commit = opts.commit ?? git(['rev-parse', 'HEAD'], project)
   const ref = opts.ref ?? git(['rev-parse', '--abbrev-ref', 'HEAD'], project)
-  const appName = config.appName ?? path.basename(project)
+  const appName = config.appName ?? graph.appName ?? path.basename(project)
   const screensDir = ensureDir(path.join(work, 'screens'))
   let captureStatus = {}
 
@@ -248,7 +254,7 @@ async function pr() {
   const scheme = config.scheme ?? headGraph.scheme ?? base.graph.scheme
   const baseSha = opts.base ?? base.manifest.source?.commit ?? null
   const headSha = opts.head ?? git(['rev-parse', 'HEAD'], project)
-  const appName = config.appName ?? base.manifest.app?.name ?? path.basename(project)
+  const appName = config.appName ?? headGraph.appName ?? base.manifest.app?.name ?? path.basename(project)
   let changed = opts['changed-files'] ? fs.readFileSync(opts['changed-files'], 'utf8').split('\n').filter(Boolean) : null
   if (!changed && baseSha) changed = (git(['diff', '--name-only', `${baseSha}...${headSha}`], project) ?? git(['diff', '--name-only', baseSha, headSha], project) ?? '').split('\n').filter(Boolean)
   if (!changed) throw new Error('cannot determine changed files: pass --changed-files <list> or make sure the base commit is fetched')
@@ -301,7 +307,7 @@ async function pr() {
     // base first so head wins on collision: a removed route only exists on the
     // base side, and without it the comment prints its bare id ("grind")
     // where every other row shows a path ("/grind")
-    routes: Object.fromEntries([...base.graph.routes, ...headGraph.routes].map((r) => [r.id, r.urlPath])),
+    routes: Object.fromEntries([...base.graph.routes, ...headGraph.routes].map((r) => [r.id, r.title ?? r.urlPath ?? r.id])),
     shots: collectShots(diffDir, [...headGraph.routes, ...base.graph.routes], [...diff.nodes.map((d) => d.id), ...(diff.dismissed ?? []).map((d) => d.id)]),
   }
   writeJson(path.join(work, 'summary.json'), summary)

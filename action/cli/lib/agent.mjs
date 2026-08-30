@@ -106,12 +106,12 @@ export function runAgent({ projectDir, config, screens, scheme, udid, bundleId, 
 Read the skill at ${SKILL_DIR}/SKILL.md for conventions (capture naming, flow recording format, safety rules: never tap destructive/purchase/sign-out controls, never record credentials). The project lives at ${projectDir}. All output paths below are absolute — write to them exactly.
 ${repoSkillText ? `\nProject-specific guidance (.screenmap/SKILL.md) — follow it:\n---\n${repoSkillText}\n---\n` : ''}
 Task (${mode}): for EACH of these screens, capture the screen and record a replayable navigation flow.
-${budgeted.map((s) => `- ${s.id}  urlPath=${s.urlPath}  slug=${s.slug}  deepLink=${s.deepLink}  file=${s.file ?? '?'}${s.reason ? `  why=${s.reason}` : ''}`).join('\n')}
+${budgeted.map((s) => `- ${s.id}  ${s.deepLink ? `urlPath=${s.urlPath}  deepLink=${s.deepLink}` : 'NO DEEP LINK — reach it by tapping from app launch'}  slug=${s.slug}  file=${s.file ?? '?'}${s.reason ? `  why=${s.reason}` : ''}`).join('\n')}
 
 Rules:
 1. Screenshots go to ${outScreensDir}/<slug>.png (state variants: <slug>--<state>.png). Use exactly these slugs.
 2. Flows go to ${outFlowsDir}/ as argent YAML + .meta.json sidecars (formatVersion 2) — nav-<slug> for the tap path from app launch (\`${scheme}://\`), visit-<slug> for the bare deep link, plus one flow per state variant you capture. Coordinates normalized 0–1 for a ${config.device}. Every sidecar MUST include \`"landmarks": [2–5 words visible on the arrival screen that identify it — titles/section headers/fixed labels, never live content]\`; CI verifies replays by OCR-ing for them.
-3. Prefer the deep link first; if it shows an error/not-found, find real params (public API, other screens) and note what you used.
+3. Prefer the deep link first; if it shows an error/not-found, find real params (public API, other screens) and note what you used. A screen marked NO DEEP LINK has no URL at all — do NOT open \`${scheme}://\` and screenshot whatever appears, which would file the home screen under its name. Navigate to it by tapping, and let its nav flow be its capture.
 4. Write ${notesPath}: JSON { "<routeId>": "one sentence describing what this screen shows${mode === 'pr' ? ' / what visibly changed in this PR' : ''}" } for each screen you handled${mode === 'pr' ? ', or { "note": "...", "verdict": "unaffected" } if the PR diff shows no visible change there' : ''}.
 5. Write ${summaryPath}: JSON { "captured": [routeIds], "skipped": [{ "id", "why" }], "flows": [flow names] } when done.
 6. Budget: these ${budgeted.length} screens only. Be economical — no broad exploration.${prContext ? `\n\nPR context: ${prContext}` : ''}`
